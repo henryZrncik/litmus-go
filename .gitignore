@@ -2,3 +2,4 @@ build/_output
 .stignore
 .idea/
 .vscode/
+*.config.json
