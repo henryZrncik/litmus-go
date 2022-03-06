@@ -49,6 +49,8 @@ import (
 	ebsLossByTag "github.com/litmuschaos/litmus-go/experiments/kube-aws/ebs-loss-by-tag/experiment"
 	ec2TerminateByID "github.com/litmuschaos/litmus-go/experiments/kube-aws/ec2-terminate-by-id/experiment"
 	ec2TerminateByTag "github.com/litmuschaos/litmus-go/experiments/kube-aws/ec2-terminate-by-tag/experiment"
+	strimziKafkaBrokerPodDelete "github.com/litmuschaos/litmus-go/experiments/strimzi/kafka-broker-pod-delete/experiment"
+	strimziOperatorChaos "github.com/litmuschaos/litmus-go/experiments/strimzi/operator-chaos/experiment"
 	vmpoweroff "github.com/litmuschaos/litmus-go/experiments/vmware/vm-poweroff/experiment"
 
 	"github.com/litmuschaos/litmus-go/pkg/clients"
@@ -108,6 +110,12 @@ func main() {
 		podCPUHogExec.PodCPUHogExec(clients)
 	case "pod-delete":
 		podDelete.PodDelete(clients)
+	case "a":
+		strimziOperatorChaos.OperatorChaos(clients)
+	case "o":
+		strimziOperatorChaos.OperatorChaos(clients)
+	case "b":
+		strimziKafkaBrokerPodDelete.PodDelete(clients)
 	case "pod-io-stress":
 		podIOStress.PodIOStress(clients)
 	case "pod-memory-hog-exec":
