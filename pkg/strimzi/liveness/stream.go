@@ -66,7 +66,7 @@ func createTopic(experimentsDetails *experimentTypes.ExperimentDetails, clients 
 	)
 	jobName := topicJobNamePrefix + experimentsDetails.Control.RunID
 	cmdImage := experimentsDetails.Images.KafkaImage
-	jobNamespace := experimentsDetails.Kafka.Namespace
+	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic
 	log.Infof("[liveness]: creation of topic %s, in order to use it for liveness stream", experimentsDetails.Topic.Name)
@@ -115,7 +115,7 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	}
 	jobName := producerJobNamePrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Images.ProducerImage, experimentsDetails.Kafka.Namespace, "", envVariables, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Images.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
@@ -134,7 +134,7 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	)
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 	cmdImage := experimentsDetails.Images.KafkaImage
-	jobNamespace := experimentsDetails.Kafka.Namespace
+	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic
 	if err := strimziJobs.ExecKube(jobName, cmdImage, jobNamespace, command, nil, clients); err != nil {
@@ -150,10 +150,10 @@ func VerifyLivenessStream(experimentsDetails *experimentTypes.ExperimentDetails,
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 
 	// consumer either did not start or we have timeout problem which will be reported
-	if err:= strimziJobs.WaitForExecPod(jobName, experimentsDetails.Kafka.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Finishing of consumer process"); err != nil {
+	if err:= strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Finishing of consumer process"); err != nil {
 	}
 
-	logs, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.Kafka.Namespace, clients)
+	logs, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.App.Namespace, clients)
 	if err != nil {
 		return err
 	}
@@ -188,21 +188,21 @@ func GetPartitionLeaderInstanceName(experimentsDetails *experimentTypes.Experime
 	)
 	jobName := obtainTopicLeaderJobPrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Images.KafkaImage, experimentsDetails.Kafka.Namespace, command, nil, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Images.KafkaImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
 		return "", err
 	}
 
-	if err := strimziJobs.WaitForExecPod(jobName, experimentsDetails.Kafka.Namespace, 30, experimentsDetails.Control.Delay, clients, "Obtaining partition leader info"); err != nil {
+	if err := strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, 30, experimentsDetails.Control.Delay, clients, "Obtaining partition leader info"); err != nil {
 		return "", err
 	}
 
-	partitionLeaderId, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.Kafka.Namespace, clients)
+	partitionLeaderId, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.App.Namespace, clients)
 	if err != nil {
 		return "", err
 	}
 
 	log.Info("[Liveness]: Determine the leader broker pod name")
-	podList, err := clients.KubeClient.CoreV1().Pods(experimentsDetails.Kafka.Namespace).List(metav1.ListOptions{LabelSelector: experimentsDetails.Kafka.Label})
+	podList, err := clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).List(metav1.ListOptions{LabelSelector: experimentsDetails.Kafka.Label})
 	if err != nil {
 		return "", errors.Errorf("unable to find the pods with matching labels, err: %v", err)
 	}

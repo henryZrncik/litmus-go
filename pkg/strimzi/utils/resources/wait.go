@@ -1,48 +1,13 @@
-package time
+package resources
 
 import (
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/strimzi/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
-	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"math/rand"
-	"strconv"
-	"strings"
 	"time"
 )
-
-func GetChaosIntervalDuration(experimentsDetails types.ExperimentDetails, randomness bool) (int, error) {
-
-	switch randomness {
-	// if randomness pick time between lower and upper bound
-	case true:
-		intervals := strings.Split(experimentsDetails.Control.ChaosInterval, "-")
-		var lowerBound, upperBound int
-		switch len(intervals) {
-		case 1:
-			lowerBound = 0
-			upperBound, _ = strconv.Atoi(intervals[0])
-		case 2:
-			lowerBound, _ = strconv.Atoi(intervals[0])
-			upperBound, _ = strconv.Atoi(intervals[1])
-		default:
-			return 0, errors.Errorf("unable to parse CHAOS_INTERVAL, provide in valid format")
-		}
-
-		rand.Seed(time.Now().UnixNano())
-		waitTime := lowerBound + rand.Intn(upperBound-lowerBound)
-		return waitTime, nil
-	default:
-		intervalTime, err := strconv.Atoi(experimentsDetails.Control.ChaosInterval)
-		if err != nil {
-			return 0, errors.Errorf("unable to parse CHAOS_INTERVAL, provide in valid format")
-		}
-		return intervalTime, err
-	}
-
-}
 
 // WaitForChaosIntervalDurationResources waits for time of single chaos interval
 // while it keeps logging information about availability of resources.
@@ -50,7 +15,7 @@ func WaitForChaosIntervalDurationResources(experimentsDetails types.ExperimentDe
 	ChaosStartTimeStamp := time.Now()
 	duration := int(time.Since(ChaosStartTimeStamp).Seconds())
 	waitTimeOfSingleChaosInterval := chaosIntervalDuration
-	appNs := experimentsDetails.Control.AppNS
+	appNs := experimentsDetails.App.Namespace
 
 	retryCount := 0
 	// there is no need to log info about resources recreated more than once
@@ -92,5 +57,3 @@ func WaitForChaosIntervalDurationResources(experimentsDetails types.ExperimentDe
 	}
 
 }
-
-

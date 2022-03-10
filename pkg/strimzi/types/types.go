@@ -1,9 +1,13 @@
 package types
 
-import clientTypes "k8s.io/apimachinery/pkg/types"
+import (
+	experimentClientSet "github.com/litmuschaos/litmus-go/pkg/strimzi/client/clientset"
+	clientTypes "k8s.io/apimachinery/pkg/types"
+)
 
 type ExperimentDetails struct {
 	Control				*Control
+	App					*App
 	Kafka				*Kafka
 	Topic 				*Topic
 	ClusterOperator 	*ClusterOperator
@@ -11,6 +15,7 @@ type ExperimentDetails struct {
 	Producer   		    *Producer
 	Images				*Images
 	Consumer			*Consumer
+	Strimzi				*Strimzi
 }
 
 // Control is for collecting all the experiment-related details
@@ -23,8 +28,8 @@ type Control struct {
 	Force               bool
 	ChaosLib            string
 	ChaosServiceAccount string
-	AppNS               string
-	AppLabel            string
+	//AppNS               string
+	//AppLabel            string
 	AppKind             string
 	ChaosUID            clientTypes.UID
 	InstanceID          string
@@ -41,10 +46,15 @@ type Control struct {
 
 }
 
+type App struct {
+	Namespace      string
+	LivenessStream string
+	LivenessStreamCleanup string
+}
+
 // Kafka
 type Kafka struct {
-	KafkaLivenessStream        string
-	KafkaLivenessStreamCleanup string
+
 	KafkaPartitionLeaderKill   string
 	KafkaInstancesName         string
 	// how to connect to kafka from liveness probe pods.
@@ -52,7 +62,16 @@ type Kafka struct {
 	Service 				   string
 	// where to check Kafka pods as default check
 	Label   				   string
-	Namespace 				   string
+	 // Deprecated moved to App
+	//Namespace 				   string
+
+}
+
+type Strimzi struct {
+	Client 	*experimentClientSet.ExampleV1Alpha1Client
+	StrimziKafkaClusterName string
+	InternalListenerPortNumber int
+	InternalListenerName string
 
 }
 

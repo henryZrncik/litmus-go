@@ -67,7 +67,7 @@ func OperatorChaos(clients clients.ClientSets) {
 
 
 	log.InfoWithValues("[Info]: The application information is as follows ", logrus.Fields{
-		"Application Namespace": experimentsDetails.Control.AppNS,
+		"Application Namespace": experimentsDetails.App.Namespace,
 		"Chaos Duration":    experimentsDetails.Control.ChaosDuration,
 		"Strimzi Operator Namespace": experimentsDetails.ClusterOperator.Namespace,
 	})
@@ -93,7 +93,7 @@ func OperatorChaos(clients clients.ClientSets) {
 			}
 		}
 
-		if err := strimziResources.HealthCheckAll(experimentsDetails.Control.AppNS, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
+		if err := strimziResources.HealthCheckAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
 			log.Errorf("Application status check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, e.i., presence of specified resources) err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -130,7 +130,7 @@ func OperatorChaos(clients clients.ClientSets) {
 
 	// TODO LIVENESS CHECK Z KAFKY natiahnuty
 	// PRE-CHAOS KAFKA APPLICATION LIVENESS CHECK
-	//switch strings.ToLower(experimentsDetails.KafkaLivenessStream) {
+	//switch strings.ToLower(experimentsDetails.LivenessStream) {
 	//case "enable":
 	//	livenessTopicLeader, err := kafka.LivenessStream(&experimentsDetails, clients)
 	//	if err != nil {
@@ -186,7 +186,7 @@ func OperatorChaos(clients clients.ClientSets) {
 			}
 		}
 
-		if err := strimziResources.HealthCheckAll(experimentsDetails.Control.AppNS, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
+		if err := strimziResources.HealthCheckAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
 			log.Errorf("Application status check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, e.i., presence of specified resources) err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -225,7 +225,7 @@ func OperatorChaos(clients clients.ClientSets) {
 	// TODO nakopcene z kafky liveness check a cleanup
 	// az skoncia vsetky tvoje checky a proby mozes skontrolovat svoj liveness
 	// Liveness Status Check (post-chaos) and cleanup
-	//switch strings.ToLower(experimentsDetails.KafkaLivenessStream) {
+	//switch strings.ToLower(experimentsDetails.LivenessStream) {
 	//case "enable":
 	//	log.Info("[Status]: Verify that the Kafka liveness pod is running(post-chaos)")
 	//	if err := status.CheckApplicationStatus(experimentsDetails.ChaoslibDetail.AppNS, "name=kafka-liveness-"+experimentsDetails.RunID, experimentsDetails.ChaoslibDetail.Timeout, experimentsDetails.ChaoslibDetail.Delay, clients); err != nil {

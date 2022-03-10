@@ -66,7 +66,7 @@ func PodDelete(clients clients.ClientSets) {
 	events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosResult")
 
 	log.InfoWithValues("[Info]: The application information is as follows ", logrus.Fields{
-		"Application Namespace":      experimentsDetails.Control.AppNS,
+		"Application Namespace":      experimentsDetails.App.Namespace,
 		"Chaos Duration":             experimentsDetails.Control.ChaosDuration,
 		"Strimzi Operator Namespace": experimentsDetails.ClusterOperator.Namespace,
 	})
@@ -79,7 +79,7 @@ func PodDelete(clients clients.ClientSets) {
 		log.Info("[Status]: Verify that the Kafka cluster is healthy(pre-chaos)")
 		// either all specified or all labeled instances will be checked.
 		log.Info("[Status]: Verify that all the kafka pods are running")
-		if err := status.CheckApplicationStatus(experimentsDetails.Kafka.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			log.Errorf("Cluster health check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the Kafka cluster is healthy, err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -114,7 +114,7 @@ func PodDelete(clients clients.ClientSets) {
 
 
 	// Liveness Check
-	if  strings.ToLower(experimentsDetails.Kafka.KafkaLivenessStream) == "enable" {
+	if  strings.ToLower(experimentsDetails.App.LivenessStream) == "enable" {
 		err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
 		if err != nil {
 			log.Errorf("Problem while creating liveness stream %v", err)
@@ -143,8 +143,8 @@ func PodDelete(clients clients.ClientSets) {
 		}
 	}
 
-	// if liveness check not provided print some warnings
-	if strings.ToLower(experimentsDetails.Kafka.KafkaLivenessStream) != "enable" {
+	// if liveness check not provided but user intend to use partition leader print warning
+	if strings.ToLower(experimentsDetails.App.LivenessStream) != "enable" {
 		switch experimentsDetails.Kafka.KafkaPartitionLeaderKill {
 		case "enable", "true", "yes":
 			log.Warn("[Info]: Cannot delete partition leader unless liveness stream is enabled (kafka instances specified with label or with explicit option will be used instead)")
@@ -179,7 +179,7 @@ func PodDelete(clients clients.ClientSets) {
 	// POST-CHAOS KAFKA CLUSTER HEALTH CHECK
 	if chaosDetails.DefaultAppHealthCheck {
 		log.Info("[Status]: Verify that the Kafka cluster is healthy(post-chaos)")
-		if err := status.CheckApplicationStatus(experimentsDetails.Kafka.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			log.Errorf("Cluster health check failed, err: %v", err)
 			failStep := "[post-chaos]: Failed to verify that the Kafka cluster is healthy, err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PostChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -214,7 +214,7 @@ func PodDelete(clients clients.ClientSets) {
 
 
 	// Post Chaos Liveness Check
-	if experimentsDetails.Kafka.KafkaLivenessStream == "enable" {
+	if experimentsDetails.App.LivenessStream == "enable" {
 		log.Infof("[liveness]: Verifying liveness of topic production/consumption during chaos (e.i., verifying that expected number of messages were produced/consumed)")
 		err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients)
 		if err != nil {
@@ -226,7 +226,7 @@ func PodDelete(clients clients.ClientSets) {
 	}
 
 	// Post Chaos Liveness Clean up
-	if experimentsDetails.Kafka.KafkaLivenessStreamCleanup == "enable" {
+	if experimentsDetails.App.LivenessStreamCleanup == "enable" {
 		log.Infof("[liveness]: resources clean up")
 		err := strimziLiveness.Cleanup(&experimentsDetails, clients)
 		if err != nil {

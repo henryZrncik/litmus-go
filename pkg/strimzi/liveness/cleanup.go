@@ -12,7 +12,7 @@ import (
 func Cleanup(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets)  error {
 	log.Infof("[Liveness]: Cleanup")
 
-	err := clients.KubeClient.CoreV1().Pods(experimentsDetails.Kafka.Namespace).DeleteCollection(
+	err := clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).DeleteCollection(
 		&metav1.DeleteOptions{},
 		metav1.ListOptions{LabelSelector: "app=kafka-liveness"},
 	)
@@ -21,7 +21,7 @@ func Cleanup(experimentsDetails *experimentTypes.ExperimentDetails, clients clie
 		return err
 	}
 
-	err = clients.KubeClient.BatchV1().Jobs(experimentsDetails.Kafka.Namespace).DeleteCollection(
+	err = clients.KubeClient.BatchV1().Jobs(experimentsDetails.App.Namespace).DeleteCollection(
 		&metav1.DeleteOptions{},
 		metav1.ListOptions{LabelSelector: "app=kafka-liveness"},
 	)

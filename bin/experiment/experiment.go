@@ -50,6 +50,7 @@ import (
 	ec2TerminateByID "github.com/litmuschaos/litmus-go/experiments/kube-aws/ec2-terminate-by-id/experiment"
 	ec2TerminateByTag "github.com/litmuschaos/litmus-go/experiments/kube-aws/ec2-terminate-by-tag/experiment"
 	strimziKafkaBrokerPodDelete "github.com/litmuschaos/litmus-go/experiments/strimzi/kafka-broker-pod-delete/experiment"
+	strimziUpdateChaos "github.com/litmuschaos/litmus-go/experiments/strimzi/kafka-update/experiment"
 	strimziOperatorChaos "github.com/litmuschaos/litmus-go/experiments/strimzi/operator-chaos/experiment"
 	vmpoweroff "github.com/litmuschaos/litmus-go/experiments/vmware/vm-poweroff/experiment"
 
@@ -111,7 +112,7 @@ func main() {
 	case "pod-delete":
 		podDelete.PodDelete(clients)
 	case "a":
-		strimziOperatorChaos.OperatorChaos(clients)
+		strimziUpdateChaos.PodDelete(clients)
 	case "o":
 		strimziOperatorChaos.OperatorChaos(clients)
 	case "b":

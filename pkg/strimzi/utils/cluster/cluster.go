@@ -11,7 +11,7 @@ import (
 func ClusterHealthCheck(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
 	// Checking Kafka pods status
 	log.Info("[Status]: Verify that all the kafka pods are running")
-	if err := status.CheckApplicationStatus(experimentsDetails.Kafka.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+	if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 		return err
 	}
 	return nil

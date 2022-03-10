@@ -103,9 +103,9 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 				"PodName": pod.Name})
 
 			if experimentsDetails.Control.Force {
-				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.Kafka.Namespace).Delete(pod.Name, &v1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
+				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).Delete(pod.Name, &v1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
 			} else {
-				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.Kafka.Namespace).Delete(pod.Name, &v1.DeleteOptions{})
+				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).Delete(pod.Name, &v1.DeleteOptions{})
 			}
 			if err != nil {
 				return err
@@ -127,7 +127,7 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 
 			//Verify the status of pod after the chaos injection
 			log.Info("[Status]: Verification for the recreation of application pod")
-			if err = status.CheckApplicationStatus(experimentsDetails.Kafka.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+			if err = status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 				return err
 			}
 		}
@@ -191,9 +191,9 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 				"PodName": pod.Name})
 
 			if experimentsDetails.Control.Force {
-				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.Control.AppNS).Delete(pod.Name, &v1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
+				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).Delete(pod.Name, &v1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
 			} else {
-				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.Control.AppNS).Delete(pod.Name, &v1.DeleteOptions{})
+				err = clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).Delete(pod.Name, &v1.DeleteOptions{})
 			}
 			if err != nil {
 				return err
@@ -216,7 +216,7 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 
 		//Verify the status of pod after the chaos injection
 		log.Info("[Status]: Verification for the recreation of application pod")
-		if err = status.CheckApplicationStatus(experimentsDetails.Kafka.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err = status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			return err
 		}
 

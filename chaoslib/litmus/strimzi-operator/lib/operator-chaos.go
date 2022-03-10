@@ -5,10 +5,9 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/events"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/probe"
-	strimzi_utils "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/resources"
-	time2 "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/time"
-
+	"github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
+	strimzi_utils "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/resources"
 	"github.com/litmuschaos/litmus-go/pkg/types"
 	//"github.com/litmuschaos/litmus-go/pkg/utils/annotation"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
@@ -82,11 +81,11 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 				"Resource type": elem.Type,
 				"Resource name:": elem.Name,
 			})
-			if err := strimzi_utils.DeleteResource(experimentsDetails.Control.AppNS, elem, experimentsDetails.Control.Force, clients); err != nil {
+			if err := strimzi_utils.DeleteResource(experimentsDetails.App.Namespace, elem, experimentsDetails.Control.Force, clients); err != nil {
 				return err
 			}
 
-			chaosIntervalDuration, err := time2.GetChaosIntervalDuration(*experimentsDetails, chaosDetails.Randomness)
+			chaosIntervalDuration, err := environment.GetChaosIntervalDuration(*experimentsDetails, chaosDetails.Randomness)
 			if err != nil {
 				return err
 			}
@@ -95,14 +94,14 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 				"Chaos Interval Duration": chaosIntervalDuration})
 
 			// wait for specified duration
-			time2.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, chaosIntervalDuration)
+			strimzi_utils.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, chaosIntervalDuration)
 
 		}
 
 
 		//Verify the existence of resources after
 		log.Info("[Status]: Verification for the recreation of application resources")
-		if err = strimzi_utils.HealthCheckAll(experimentsDetails.Control.AppNS,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
+		if err = strimzi_utils.HealthCheckAll(experimentsDetails.App.Namespace,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
 			return err
 		}
 
@@ -140,11 +139,11 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 			//"Resource type": resource.Type,
 			"Resource": experimentsDetails.Resources.Resources})
 
-		if err := strimzi_utils.DeleteAll(experimentsDetails.Control.AppNS, experimentsDetails.Resources.Resources, experimentsDetails.Control.Force, clients); err != nil {
+		if err := strimzi_utils.DeleteAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Force, clients); err != nil {
 			return err
 		}
 
-		chaosIntervalDuration, err := time2.GetChaosIntervalDuration(*experimentsDetails, chaosDetails.Randomness)
+		chaosIntervalDuration, err := environment.GetChaosIntervalDuration(*experimentsDetails, chaosDetails.Randomness)
 		if err != nil {
 			return err
 		}
@@ -153,11 +152,11 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 			"Chaos Interval Duration": chaosIntervalDuration})
 
 		// wait for specified duration
-		time2.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, chaosIntervalDuration)
+		strimzi_utils.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, chaosIntervalDuration)
 
 		//Verify the existence of resources after
 		log.Info("[Status]: Verification for the recreation of application resources")
-		if err = strimzi_utils.HealthCheckAll(experimentsDetails.Control.AppNS,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
+		if err = strimzi_utils.HealthCheckAll(experimentsDetails.App.Namespace,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
 			return err
 		}
 
