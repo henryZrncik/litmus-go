@@ -68,7 +68,7 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 	for duration < experimentsDetails.Control.ChaosDuration {
 		// Get the target pod details for the chaos execution
 		// if the target pod is not defined it will derive the random target pod list using pod affected percentage
-		if experimentsDetails.Kafka.Label == "" && experimentsDetails.Kafka.KafkaInstancesName == "" {
+		if chaosDetails.AppDetail.Label == "" && experimentsDetails.Kafka.KafkaInstancesName == "" {
 			return errors.Errorf("please provide on of options: kafka label, instances or enable killing of leader as well as liveness stream")
 		}
 		targetPodList, err := common.GetPodList(experimentsDetails.Kafka.KafkaInstancesName, experimentsDetails.Control.PodsAffectedPerc, clients, chaosDetails)
@@ -127,7 +127,7 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 
 			//Verify the status of pod after the chaos injection
 			log.Info("[Status]: Verification for the recreation of application pod")
-			if err = status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+			if err = status.CheckApplicationStatus(experimentsDetails.App.Namespace, chaosDetails.AppDetail.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 				return err
 			}
 		}
@@ -152,6 +152,7 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 	//ChaosStartTimeStamp contains the start timestamp, when the chaos injection begin
 	ChaosStartTimeStamp := time.Now()
 	duration := int(time.Since(ChaosStartTimeStamp).Seconds())
+
 
 	for duration < experimentsDetails.Control.ChaosDuration {
 		// Get the target pod details for the chaos execution
@@ -216,7 +217,7 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 
 		//Verify the status of pod after the chaos injection
 		log.Info("[Status]: Verification for the recreation of application pod")
-		if err = status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err = status.CheckApplicationStatus(experimentsDetails.App.Namespace, chaosDetails.AppDetail.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			return err
 		}
 

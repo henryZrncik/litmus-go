@@ -2,24 +2,25 @@ package experiment
 
 import (
 	"github.com/litmuschaos/chaos-operator/pkg/apis/litmuschaos/v1alpha1"
-	litmusLIB "github.com/litmuschaos/litmus-go/chaoslib/litmus/strimzi-operator/lib"
+	"github.com/litmuschaos/litmus-go/chaoslib/litmus/strimzi-resource-delete/lib"
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/events"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/probe"
 	"github.com/litmuschaos/litmus-go/pkg/result"
-	"github.com/litmuschaos/litmus-go/pkg/status"
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
+	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
 	strimziResources "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/resources"
 	"github.com/litmuschaos/litmus-go/pkg/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/sirupsen/logrus"
 	"os"
+	"strings"
 )
 
-// OperatorChaos inject the pod-delete chaos
-func OperatorChaos(clients clients.ClientSets) {
+// ResourcesDeletion inject the chaos by deleting specified Strimzi resources
+func ResourcesDeletion(clients clients.ClientSets) {
 
 	experimentsDetails := experimentTypes.ExperimentDetails{}
 	resultDetails := types.ResultDetails{}
@@ -27,11 +28,10 @@ func OperatorChaos(clients clients.ClientSets) {
 	chaosDetails := types.ChaosDetails{}
 
 	//Fetching all the ENV passed from the runner pod
-	log.Infof("[PreReq]: Starting Strimzi Operator Chaos experiment")
 	log.Infof("[PreReq]: Getting the ENV for the %v experiment", os.Getenv("EXPERIMENT_NAME"))
 	experimentEnv.GetENV(&experimentsDetails)
 
-	// parsing of provided resources
+	// parsing of provided resources as it is simpler to keep them all in one struct
 	experimentsDetails.Resources.Resources = strimziResources.ParseResourcesFromEnvs(experimentsDetails)
 
 	// Initialize the chaos attributes
@@ -69,31 +69,19 @@ func OperatorChaos(clients clients.ClientSets) {
 	log.InfoWithValues("[Info]: The application information is as follows ", logrus.Fields{
 		"Application Namespace": experimentsDetails.App.Namespace,
 		"Chaos Duration":    experimentsDetails.Control.ChaosDuration,
-		"Strimzi Operator Namespace": experimentsDetails.ClusterOperator.Namespace,
+		"Resources marked for deletion": experimentsDetails.Resources.Resources,
+		"Liveness stream": experimentsDetails.App.LivenessStream,
 	})
 
 	// Calling AbortWatcher go routine, it will continuously watch for the abort signal and generate the required events and result
 	go common.AbortWatcher(experimentsDetails.Control.ExperimentName, clients, &resultDetails, &chaosDetails, &eventsDetails)
 
-	//PRE-CHAOS APPLICATION STATUS CHECK
+	//PRE-CHAOS APPLICATION STATUS CHECK  (DEFAULT_APP_HEALTH_CHECK, default=true)
 	if chaosDetails.DefaultAppHealthCheck {
+		// Application check is skipped because there is no pod/container  that need to be checked
 		log.Info("[Status]: Verify that the AUT (Application Under Test) is running (pre-chaos)")
-
-		// if user provides both Strimzi operator pod's label and namespace, Strimzi cluster operator  pod is also checked
-		if experimentsDetails.ClusterOperator.Namespace != "" && experimentsDetails.ClusterOperator.Label != ""  {
-			log.Info("[Status]: Verify that Strimzi cluster operator is up and running")
-
-			if err := status.AUTStatusCheck(experimentsDetails.ClusterOperator.Namespace, experimentsDetails.ClusterOperator.Label, "", experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, &chaosDetails); err != nil {
-				log.Errorf("Application status check failed, err: %v", err)
-				failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, e.i., Strimzi operator pod) is in running state, err: " + err.Error()
-				types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
-				events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
-				result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
-				return
-			}
-		}
-
-		if err := strimziResources.HealthCheckAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
+		// instead of that, existence of resources of verified.
+		if err := strimziResources.HealthCheckResources(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
 			log.Errorf("Application status check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, e.i., presence of specified resources) err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -103,6 +91,7 @@ func OperatorChaos(clients clients.ClientSets) {
 		}
 
 	}
+	// No need to check auxiliary app as there is none.
 
 	if experimentsDetails.Control.EngineName != "" {
 		// marking AUT as running, as we already checked the status of application under test
@@ -127,32 +116,34 @@ func OperatorChaos(clients clients.ClientSets) {
 		events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
 	}
 
+	// PRE-CHAOS STRIMZI KAFKA APPLICATION LIVENESS CHECK
+	switch strings.ToLower(experimentsDetails.App.LivenessStream) {
+	case "enable":
+		// defer delete liveness jobs
+		if strings.ToLower(experimentsDetails.App.LivenessStreamJobsCleanup) == "enable" {
+			log.Infof("[Liveness-Cleanup]: Defer clean up of jobs")
+			defer strimziLiveness.JobsCleanup(&experimentsDetails,clients)
+		}
+		// defer Delete liveness topic
+		if strings.ToLower(experimentsDetails.App.LivenessStreamTopicCleanup) == "enable" {
+			log.Infof("[Liveness-Cleanup]: Defer clean up of topic")
+			defer strimziLiveness.TopicCleanup(&experimentsDetails,clients)
+		}
+		// apply liveness stream
+		err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
+		if err != nil {
+			log.Errorf("Liveness check failed, err: %v", err)
+			failStep := "[pre-chaos]: Failed to verify liveness check, err: " + err.Error()
+			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+			return
+		}
+		log.Info("[Liveness]: The Liveness stream creation completed")
+	}
 
-	// TODO LIVENESS CHECK Z KAFKY natiahnuty
-	// PRE-CHAOS KAFKA APPLICATION LIVENESS CHECK
-	//switch strings.ToLower(experimentsDetails.LivenessStream) {
-	//case "enable":
-	//	livenessTopicLeader, err := kafka.LivenessStream(&experimentsDetails, clients)
-	//	if err != nil {
-	//		log.Errorf("Liveness check failed, err: %v", err)
-	//		failStep := "[pre-chaos]: Failed to verify liveness check, err: " + err.Error()
-	//		result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
-	//		return
-	//	}
-	//	log.Info("The Liveness pod gets established")
-	//	log.Infof("[Info]: Kafka partition leader is %v", livenessTopicLeader)
-	//
-	//	if experimentsDetails.KafkaBroker == "" {
-	//		experimentsDetails.KafkaBroker = livenessTopicLeader
-	//	}
-	//}
-	// TODO including dosplay
-	//kafka.DisplayKafkaBroker(&experimentsDetails)
-
-	// Including the litmus lib for pod-delete
+	//Including the litmus lib for strimzi-resource-delete
 	switch experimentsDetails.Control.ChaosLib {
 	case "litmus":
-		if err := litmusLIB.PrepareChaosInjection(&experimentsDetails, clients, &resultDetails, &eventsDetails, &chaosDetails); err != nil {
+		if err := lib.PrepareResourceDelete(&experimentsDetails, clients, &resultDetails, &eventsDetails, &chaosDetails); err != nil {
 			log.Errorf("Chaos injection failed, err: %v", err)
 			failStep := "[chaos]: Failed inside the chaoslib, err: " + err.Error()
 			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
@@ -172,21 +163,7 @@ func OperatorChaos(clients clients.ClientSets) {
 	if chaosDetails.DefaultAppHealthCheck {
 		log.Info("[Status]: Verify that the AUT (Application Under Test) is running (post-chaos)")
 
-		// if user provides both Strimzi operator pod's label and namespace, Strimzi cluster operator  pod is also checked
-		if experimentsDetails.ClusterOperator.Namespace != "" && experimentsDetails.ClusterOperator.Label != ""  {
-			log.Info("[Status]: Verify that Strimzi cluster operator is up and running")
-
-			if err := status.AUTStatusCheck(experimentsDetails.ClusterOperator.Namespace, experimentsDetails.ClusterOperator.Label, "", experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, &chaosDetails); err != nil {
-				log.Errorf("Application status check failed, err: %v", err)
-				failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, e.i., Strimzi operator pod) is in running state, err: " + err.Error()
-				types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
-				events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
-				result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
-				return
-			}
-		}
-
-		if err := strimziResources.HealthCheckAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
+		if err := strimziResources.HealthCheckResources(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Timeout,experimentsDetails.Control.Delay, clients); err != nil{
 			log.Errorf("Application status check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, e.i., presence of specified resources) err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -220,31 +197,17 @@ func OperatorChaos(clients clients.ClientSets) {
 		events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
 	}
 
-
-
-	// TODO nakopcene z kafky liveness check a cleanup
-	// az skoncia vsetky tvoje checky a proby mozes skontrolovat svoj liveness
-	// Liveness Status Check (post-chaos) and cleanup
-	//switch strings.ToLower(experimentsDetails.LivenessStream) {
-	//case "enable":
-	//	log.Info("[Status]: Verify that the Kafka liveness pod is running(post-chaos)")
-	//	if err := status.CheckApplicationStatus(experimentsDetails.ChaoslibDetail.AppNS, "name=kafka-liveness-"+experimentsDetails.RunID, experimentsDetails.ChaoslibDetail.Timeout, experimentsDetails.ChaoslibDetail.Delay, clients); err != nil {
-	//		log.Errorf("Application liveness status check failed, err: %v", err)
-	//		failStep := "[post-chaos]: Failed to verify that the liveness pod is running, err: " + err.Error()
-	//		result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
-	//		return
-	//	}
-	//
-	//	log.Info("[CleanUp]: Deleting the kafka liveness pod(post-chaos)")
-	//	if err := kafka.LivenessCleanup(&experimentsDetails, clients); err != nil {
-	//		log.Errorf("liveness cleanup failed, err: %v", err)
-	//		failStep := "[post-chaos]: Failed to perform liveness pod cleanup, err: " + err.Error()
-	//		result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
-	//		return
-	//	}
-	//}
-
-
+	// Liveness Status Check (post-chaos)
+	switch strings.ToLower(experimentsDetails.App.LivenessStream) {
+	case "enable":
+		log.Info("[Status]: Verify that the Kafka liveness jobs finished successfully (post-chaos)")
+		if err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients); err != nil {
+			log.Errorf("Application liveness status check failed, err: %v", err)
+			failStep := "[post-chaos]: Failed to verify that the liveness jobs finished successfully, err: " + err.Error()
+			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+			return
+		}
+	}
 
 
 	//Updating the chaosResult in the end of experiment

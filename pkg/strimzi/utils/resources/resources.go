@@ -13,12 +13,17 @@ import (
 	"time"
 )
 
+
+
+// ParseResourcesFromEnvs convert multiple fields specified by env holding comma separated lists of resources into one list
 func ParseResourcesFromEnvs(experimentsDetails experimentTypes.ExperimentDetails) []experimentTypes.KubernetesResource {
 	resourcesList := make([]experimentTypes.KubernetesResource, 0)
+	// split all resources by comma
 	targetServicesList := strings.Split(experimentsDetails.Resources.Services, ",")
 	targetSecretList := strings.Split(experimentsDetails.Resources.Secrets, ",")
 	targetConfigMapList := strings.Split(experimentsDetails.Resources.ConfigMaps, ",")
 
+	// for each resource append it and its type
 	for _, v := range targetServicesList {
 		resourcesList = append(resourcesList, experimentTypes.KubernetesResource{v, experimentTypes.ServiceResourceType})
 	}
@@ -28,11 +33,21 @@ func ParseResourcesFromEnvs(experimentsDetails experimentTypes.ExperimentDetails
 	for _, v := range targetConfigMapList {
 		resourcesList = append(resourcesList, experimentTypes.KubernetesResource{v, experimentTypes.ConfigMapResourceType})
 	}
-	return resourcesList
+
+	// filter possible empty resources
+	var noneEmpty []experimentTypes.KubernetesResource
+	for _,v := range resourcesList {
+		if v.Name != "" {
+			noneEmpty = append(noneEmpty, v)
+		}
+	}
+	return noneEmpty
 
 }
 
-// DeleteAll deletes all provided resources, it does not consider problem if any of them already does not exist, for that is purpose of default health check, yet it logs it as a warning.
+
+
+// DeleteAll deletes all provided resources, it does not consider problem if any of them already does not exist, for that is purpose of default health check.
 func DeleteAll(appNs string, resources []experimentTypes.KubernetesResource, force bool, clients clients.ClientSets) error {
 	for _, resource := range resources {
 		log.InfoWithValues("[Chaos]: deleting following resource", logrus.Fields{
@@ -49,27 +64,23 @@ func DeleteAll(appNs string, resources []experimentTypes.KubernetesResource, for
 
 func DeleteResource(appNs string, resource experimentTypes.KubernetesResource, force bool, clients clients.ClientSets) error {
 	GracePeriod := int64(0)
-
 	var err error
+
+	// set options depending on force option
+	var options *metav1.DeleteOptions
+	if force {
+		options = &metav1.DeleteOptions{GracePeriodSeconds: &GracePeriod}
+	} else {
+		options = &metav1.DeleteOptions{}
+	}
+
 	switch resource.Type {
 	case experimentTypes.ConfigMapResourceType:
-		if force {
-			err = clients.KubeClient.CoreV1().ConfigMaps(appNs).Delete(resource.Name, &metav1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
-		} else {
-			err = clients.KubeClient.CoreV1().ConfigMaps(appNs).Delete(resource.Name, &metav1.DeleteOptions{})
-		}
+		err = clients.KubeClient.CoreV1().ConfigMaps(appNs).Delete(resource.Name, options)
 	case experimentTypes.ServiceResourceType:
-		if force {
-			err = clients.KubeClient.CoreV1().Services(appNs).Delete(resource.Name, &metav1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
-		} else {
-			err = clients.KubeClient.CoreV1().Services(appNs).Delete(resource.Name, &metav1.DeleteOptions{})
-		}
+		err = clients.KubeClient.CoreV1().Services(appNs).Delete(resource.Name, options)
 	case experimentTypes.SecretResourceType:
-		if force {
-			err = clients.KubeClient.CoreV1().Secrets(appNs).Delete(resource.Name, &metav1.DeleteOptions{GracePeriodSeconds: &GracePeriod})
-		} else {
-			err = clients.KubeClient.CoreV1().Secrets(appNs).Delete(resource.Name, &metav1.DeleteOptions{})
-		}
+		err = clients.KubeClient.CoreV1().Secrets(appNs).Delete(resource.Name, options)
 	default:
 		return errors.Errorf("unsupported resource type")
 	}
@@ -77,16 +88,14 @@ func DeleteResource(appNs string, resource experimentTypes.KubernetesResource, f
 	// deleting already deleted resource should only cause warning, as user only injects chaos way too often
 	if kubeErrors.IsNotFound(err) {
 		log.Warnf("[Chaos]: %v",err.Error())
-	}
-
-	if err != nil {
+	} else if err != nil {
 		log.Error(err.Error())
 		return err
 	}
 	return nil
 }
 
-func HealthCheckAll(appNs string, resources []experimentTypes.KubernetesResource, timeout, delay int, clients clients.ClientSets) error {
+func HealthCheckResources(appNs string, resources []experimentTypes.KubernetesResource, timeout, delay int, clients clients.ClientSets) error {
 	// used to log info only each 5th time resources are checked (used instead of time due to differences in lagging)
 	retryCount := 0
 	var isLogged bool = false
@@ -126,5 +135,3 @@ func HealthCheckAll(appNs string, resources []experimentTypes.KubernetesResource
 			return nil
 		})
 }
-
-

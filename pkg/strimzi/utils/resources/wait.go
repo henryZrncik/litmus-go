@@ -34,26 +34,30 @@ func WaitForChaosIntervalDurationResources(experimentsDetails types.ExperimentDe
 			case types.SecretResourceType:
 				_, err = clients.KubeClient.CoreV1().Secrets(appNs).Get(resource.Name, v1.GetOptions{})
 			}
+			// once an error is found, another successful read would override it.
+			if err != nil {
+				break
+			}
 		}
 
-		common.WaitForDuration(1)
+		common.WaitForDuration(experimentsDetails.Control.Delay)
 		duration = int(time.Since(ChaosStartTimeStamp).Seconds())
 
 		// as soon as all resources are ready, this change is printed
 		if err == nil && !isLogged {
 			isLogged = true
-			log.Infof("[Wait]: time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
+			log.Infof("[Wait]: Time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
 			continue
 		}
 
-		// state (that we wait) is printed approximately every 30 seconds
-		if retryCount%30 == 0 {
+		// state (that we wait) is printed every 10th iteration
+		if retryCount% 10 == 0 {
 			if err != nil {
-				log.Infof("[Wait]: time %v/%v. %v ", duration, waitTimeOfSingleChaosInterval, err.Error())
+				log.Infof("[Wait]: Time %v/%v. %v ", duration, waitTimeOfSingleChaosInterval, err.Error())
 			} else {
-				log.Infof("[Wait]: time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
+				log.Infof("[Wait]: Time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
 			}
 		}
 	}
-
+	log.Infof("[Wait]: time %v/%v. Waiting over", duration, waitTimeOfSingleChaosInterval)
 }

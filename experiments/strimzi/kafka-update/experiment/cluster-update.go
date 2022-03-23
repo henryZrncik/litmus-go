@@ -9,35 +9,29 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/probe"
 	"github.com/litmuschaos/litmus-go/pkg/result"
 	"github.com/litmuschaos/litmus-go/pkg/status"
-	"github.com/litmuschaos/litmus-go/pkg/utils/common"
-	"github.com/sirupsen/logrus"
-
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
+	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-
 	strimzikafkaresource "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/update"
 	"github.com/litmuschaos/litmus-go/pkg/types"
+	"github.com/litmuschaos/litmus-go/pkg/utils/common"
+	"github.com/sirupsen/logrus"
 	"os"
+	"strings"
 )
 
 
-
-
-
-func PodDelete(clients clients.ClientSets) {
+func Update(clients clients.ClientSets) {
 	experimentsDetails := experimentTypes.ExperimentDetails{}
 	resultDetails := types.ResultDetails{}
 	eventsDetails := types.EventDetails{}
 	chaosDetails := types.ChaosDetails{}
-
-
 
 	log.Infof("[PreReq]: Starting Strimzi Kafka Cluster Update experiment")
 
 	//Fetching all the ENV passed from the runner pod
 	log.Infof("[PreReq]: Getting the ENV for the %v experiment", os.Getenv("EXPERIMENT_NAME"))
 	experimentEnv.GetENV(&experimentsDetails)
-
 
 	// Initialize the chaos attributes
 	types.InitialiseChaosVariables(&chaosDetails)
@@ -71,30 +65,31 @@ func PodDelete(clients clients.ClientSets) {
 	events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosResult")
 
 	log.InfoWithValues("[Info]: The application information is as follows ", logrus.Fields{
-		"Application Namespace":      experimentsDetails.App.Namespace,
-		"Chaos Duration":             experimentsDetails.Control.ChaosDuration,
+		"Application Namespace": experimentsDetails.App.Namespace,
+		"Chaos Duration":        experimentsDetails.Control.ChaosDuration,
+		"Liveness stream": experimentsDetails.App.LivenessStream,
 	})
 
 	// Calling AbortWatcher go routine, it will continuously watch for the abort signal and generate the required events and result
 	go common.AbortWatcher(experimentsDetails.Control.ExperimentName, clients, &resultDetails, &chaosDetails, &eventsDetails)
 
 
-	// Custom Pre chaos step 1:
-	// set up strimzi specific k8 client
+	// Pre chaos step: set up strimzi specific k8 client
 	log.Infof("[PreReq]: Set up strimzi k8 client")
-	err := strimzikafkaresource.InitStrimziClient(&experimentsDetails, clients)
+	strimziClient, err := strimzikafkaresource.InitStrimziClient(clients)
 	if err != nil {
 		log.Errorf("Unable to create Strimzi client, err: %v", err)
 		failStep := "[pre-chaos]: Failed to create Strimzi client, err: " + err.Error()
 		result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
 		return
 	}
+	experimentsDetails.Strimzi.Client = strimziClient
 
 	// PRE-CHAOS APPLICATION STATUS CHECK
 	// by checking health status of all kafka pods.
 	if chaosDetails.DefaultAppHealthCheck {
 		log.Info("[Status]: Verify that all the Strimzi kafka pods are running")
-		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, chaosDetails.AppDetail.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			log.Errorf("Cluster health check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the Kafka cluster is healthy, err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -103,7 +98,6 @@ func PodDelete(clients clients.ClientSets) {
 			return
 		}
 	}
-
 
 	if experimentsDetails.Control.EngineName != "" {
 		// marking AUT as running, as we already checked the status of application under test
@@ -128,14 +122,31 @@ func PodDelete(clients clients.ClientSets) {
 		events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
 	}
 
-	// TODO
-	// PRE-CHAOS LIVENESS CHECK
+	// PRE-CHAOS STRIMZI KAFKA APPLICATION LIVENESS CHECK
+	switch strings.ToLower(experimentsDetails.App.LivenessStream) {
+	case "enable":
+		// defer delete liveness jobs
+		if strings.ToLower(experimentsDetails.App.LivenessStreamJobsCleanup) == "enable" {
+			log.Infof("[Liveness-Cleanup]: Defer clean up of jobs")
+			defer strimziLiveness.JobsCleanup(&experimentsDetails,clients)
+		}
+		// defer Delete liveness topic
+		if strings.ToLower(experimentsDetails.App.LivenessStreamTopicCleanup) == "enable" {
+			log.Infof("[Liveness-Cleanup]: Defer clean up of topic")
+			defer strimziLiveness.TopicCleanup(&experimentsDetails,clients)
+		}
+		// apply liveness stream
+		err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
+		if err != nil {
+			log.Errorf("Liveness check failed, err: %v", err)
+			failStep := "[pre-chaos]: Failed to verify liveness check, err: " + err.Error()
+			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+			return
+		}
+		log.Info("[Liveness]: The Liveness stream creation completed")
+	}
 
-	// TODO including dosplay
-	//kafka.DisplayKafkaBroker(&experimentsDetails)
 
-	// TODO import lib
-	// Including the litmus lib for pod-delete
 	switch experimentsDetails.Control.ChaosLib {
 	case "litmus":
 		if err := litmusLIB.PrepareChaosInjection(&experimentsDetails, clients, &resultDetails, &eventsDetails, &chaosDetails); err != nil {
@@ -151,174 +162,82 @@ func PodDelete(clients clients.ClientSets) {
 		return
 	}
 
-
 	log.Infof("[Confirmation]: %v chaos has been injected successfully", experimentsDetails.Control.ExperimentName)
 	resultDetails.Verdict = v1alpha1.ResultVerdictPassed
 
+	//POST-CHAOS APPLICATION STATUS CHECK
+	if chaosDetails.DefaultAppHealthCheck {
+		log.Info("[Status]: Verify that the AUT (Application Under Test) is running (post-chaos)")
+
+		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, chaosDetails.AppDetail.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+			log.Errorf("Application status check failed, err: %v", err)
+			failStep := "[pre-chaos]: Failed to verify that the AUT (Application Under Test, err: " + err.Error()
+			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
+			events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
+			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+			return
+		}
+
+	}
+
+	if experimentsDetails.Control.EngineName != "" {
+		// marking AUT as running, as we already checked the status of application under test
+		msg := common.GetStatusMessage(chaosDetails.DefaultAppHealthCheck, "AUT: Running", "")
+
+		// run the probes in the post-chaos check
+		if len(resultDetails.ProbeDetails) != 0 {
+			if err := probe.RunProbes(&chaosDetails, clients, &resultDetails, "PostChaos", &eventsDetails); err != nil {
+				log.Errorf("Probes Failed, err: %v", err)
+				failStep := "[post-chaos]: Failed while running probes, err: " + err.Error()
+				msg = common.GetStatusMessage(chaosDetails.DefaultAppHealthCheck, "AUT: Running", "Unsuccessful")
+				types.SetEngineEventAttributes(&eventsDetails, types.PostChaosCheck, msg, "Warning", &chaosDetails)
+				events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
+				result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+				return
+			}
+			common.GetStatusMessage(chaosDetails.DefaultAppHealthCheck, "AUT: Running", "Successful")
+		}
+
+		// generating post chaos event
+		types.SetEngineEventAttributes(&eventsDetails, types.PostChaosCheck, msg, "Normal", &chaosDetails)
+		events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
+	}
+
+	// Liveness Status Check (post-chaos) and cleanup
+	switch strings.ToLower(experimentsDetails.App.LivenessStream) {
+	case "enable":
+		log.Info("[Status]: Verify that the Kafka liveness jobs finished successfully (post-chaos)")
+		if err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients); err != nil {
+			log.Errorf("Application liveness status check failed, err: %v", err)
+			failStep := "[post-chaos]: Failed to verify that the liveness jobs finished successfully, err: " + err.Error()
+			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+			return
+		}
+	}
+
+
+	//Updating the chaosResult in the end of experiment
+	log.Infof("[The End]: Updating the chaos result of %v experiment (EOT)", experimentsDetails.Control.ExperimentName)
+	if err := result.ChaosResult(&chaosDetails, clients, &resultDetails, "EOT"); err != nil {
+		log.Errorf("Unable to Update the Chaos Result, err: %v", err)
+		return
+	}
+
+	// generating the event in chaosresult to marked the verdict as pass/fail
+	msg = "experiment: " + experimentsDetails.Control.ExperimentName + ", Result: " + string(resultDetails.Verdict)
+	reason := types.PassVerdict
+	eventType := "Normal"
+	if resultDetails.Verdict != "Pass" {
+		reason = types.FailVerdict
+		eventType = "Warning"
+	}
+	types.SetResultEventAttributes(&eventsDetails, reason, msg, eventType, &resultDetails)
+	events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosResult")
+
+	if experimentsDetails.Control.EngineName != "" {
+		msg := experimentsDetails.Control.ExperimentName + " experiment has been " + string(resultDetails.Verdict) + "ed"
+		types.SetEngineEventAttributes(&eventsDetails, types.Summary, msg, "Normal", &chaosDetails)
+		events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
+	}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	// NEW
-
-
-
-
-	//{ "op": "replace", "path": "/baz", "value": "boo" },
-	//{ "op": "add", "path": "/hello", "value": ["world"] },
-	//{ "op": "remove", "path": "/foo" }
-
-	//var a []utils.Listener = projects.Spec.Spec.Listeners
-	//a = append(a, utils.Listener{
-	//	"bobino",
-	//	9096,
-	//	true,
-	//	"internal",
-	//
-	//})
-
-
-
-	//// Patch part
-	//payload := []patchObjectValue{{
-	//	Op:    "add",
-	//	Path:  "/spec/kafka/listeners/0",
-	//	Value: utils.Listener{
-	//		"bobino",
-	//		9999,
-	//		true,
-	//		"internal",
-	//	},
-	//}}
-
-	//payload := []patchUInt32Value{{
-	//	Op:    "replace",
-	//	Path:  "/spec/kafka/replicas",
-	//	Value: 4,
-	//}}
-	//
-	//payload := []patchUInt32Value{{
-	//	Op:    "replace",
-	//	Path:  "/spec/kafka/replicas",
-	//	Value: 9999,
-	//}}
-
-
-
-
-
-	// NEW END
-
-	// OLD
-
-	// use client for fun
-	//clientSet, err := experimentClientSetE.NewForConfig(clients.KubeConfig)
-	//if err != nil {
-	//	log.Errorf("[Error]: Unable to create Strimzi Kubernetes client")
-	//	panic(err)
-	//}
-	//
-	//projects, err := clientSet.Projects("default").Get("example-project-2", metav1.GetOptions{})
-	//if err != nil {
-	//	log.Errorf("[Error]: Problem using mu Strimzi client")
-	//	panic(err)
-	//}
-	//fmt.Printf("projects found: %+v\n", projects)
-	//
-	//// Patch part
-	//payload := []patchUInt32Value{{
-	//	Op:    "replace",
-	//	Path:  "/spec/replicas",
-	//	Value: 160,
-	//}}
-	//
-	//payloadBytes, _ := json.Marshal(payload)
-	//
-	//_,err = clientSet.Projects("default").Patch("example-project-2", fucker.JSONPatchType, payloadBytes,metav1.PatchOptions{
-	//	FieldManager: "application/apply-patch",
-	//},"" )
-	//if err != nil {
-	//	log.Errorf("[Error]: Problem using mu Strimzi client")
-	//	panic(err)
-	//}
-
-
-	// OLD end
-
-
-
-
-
-
-
-
-
-
-
-
-
-	//projects.Spec.Replicas = 15
-
-	//projects, err = clientSet.Projects("default").Update(projects, metav1.UpdateOptions{})
-	//if err != nil {
-	//	log.Errorf("[Error]: Problem using mu Strimzi client")
-	//	panic(err)
-	//}
-
-	//fmt.Printf("projects found: %+v\n", projects)
-
-	//
-	//result := experimentClient.ProjectList{}
-	//err = client.
-	//	Get().
-	//	Resource("projects").
-	//	Do().
-	//	Into(&result)
-	//
-	//if err != nil {
-	//	log.Errorf("[Error]: Problem using mu Strimzi client")
-	//	panic(err)
-	//}
-
-	//return nil
 }

@@ -5,14 +5,14 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/strimzi/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1pod "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8types "k8s.io/apimachinery/pkg/types"
 	"time"
 )
 
 // WaitForChaosIntervalDurationResources waits for time of single chaos interval
-// while it keeps logging information about availability of resources.
+// while it keeps logging information about availability of resources (updated pods).
 func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients clients.ClientSets, podsUIDs []k8types.UID,  chaosIntervalDuration int) {
 	ChaosStartTimeStamp := time.Now()
 	duration := int(time.Since(ChaosStartTimeStamp).Seconds())
@@ -27,20 +27,17 @@ func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients 
 		var err error
 
 		// get present pods with kafka label
-		pods, err := clients.KubeClient.CoreV1().Pods(exp.App.Namespace).List(v1.ListOptions{LabelSelector: exp.Kafka.Label})
+		pods, err := clients.KubeClient.CoreV1().Pods(exp.App.Namespace).List(v1.ListOptions{LabelSelector: exp.Control.AppLabel})
 		if err != nil {
 			return
 		}
 
-		// how many pods are already changed.
-		podReadyAndChanged := 0
 		// how many pods we need to change
 		podTotal := len(pods.Items)
-
-		// check how many pods are changed
-
 		// for each UID (of original Pods) increase counter if it is not present
 		terminatedOldPodsCount := 0
+
+		// check how many pods are changed
 		for _, uid := range podsUIDs{
 			// pod is not present, increase terminated count
 			if !isUIDAmongstPods(uid, pods.Items){
@@ -48,43 +45,26 @@ func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients 
 			}
 		}
 
-		// all old pods were terminated, waiting for
-		if terminatedOldPodsCount == podTotal{
-
-		}
-
-
-		for _, pod := range pods.Items {
-			if  {
-
-			}
-			pod.UID
-		}
-
-		// check how many pods are ready
-
-
-
-		common.WaitForDuration(1)
+		common.WaitForDuration(exp.Control.Delay)
 		duration = int(time.Since(ChaosStartTimeStamp).Seconds())
 
-		// as soon as all resources are ready, this change is printed
-		if err == nil && !isLogged {
+		// all old pods were terminated,it can still take some time for new pods to  become ready
+		if terminatedOldPodsCount == podTotal && !isLogged{
 			isLogged = true
-			log.Infof("[Wait]: time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
+			log.Infof("[Wait]: Time %v/%v. Updated strimzi kafka pods:%d/%d", duration, waitTimeOfSingleChaosInterval, terminatedOldPodsCount, podTotal)
 			continue
 		}
 
-		// state (that we wait) is printed approximately every 30 seconds
-		if retryCount%30 == 0 {
-			if err != nil {
-				log.Infof("[Wait]: time %v/%v. %v ", duration, waitTimeOfSingleChaosInterval, err.Error())
+		//to make waiting more informative, state (while we wait) is printed every 10th iteration
+		if retryCount % 10 == 0 {
+			if terminatedOldPodsCount != podTotal {
+				log.Infof("[Wait]: Time %v/%v. Updated strimzi kafka pods:%d/%d", duration, waitTimeOfSingleChaosInterval, terminatedOldPodsCount, podTotal)
 			} else {
-				log.Infof("[Wait]: time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
+				log.Infof("[Wait]: Time %v/%v. All strimzi kafka pods are updated (%d/%d).", duration, waitTimeOfSingleChaosInterval,terminatedOldPodsCount, podTotal)
 			}
 		}
 	}
-
+	log.Infof("[Wait]: Time %v/%v. Waiting over", duration, waitTimeOfSingleChaosInterval)
 }
 
 

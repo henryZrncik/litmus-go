@@ -10,7 +10,6 @@ type ExperimentDetails struct {
 	App					*App
 	Kafka				*Kafka
 	Topic 				*Topic
-	ClusterOperator 	*ClusterOperator
 	Resources			*Resources
 	Producer   		    *Producer
 	Images				*Images
@@ -29,7 +28,7 @@ type Control struct {
 	ChaosLib            string
 	ChaosServiceAccount string
 	//AppNS               string
-	//AppLabel            string
+	AppLabel            string
 	AppKind             string
 	ChaosUID            clientTypes.UID
 	InstanceID          string
@@ -49,7 +48,8 @@ type Control struct {
 type App struct {
 	Namespace      string
 	LivenessStream string
-	LivenessStreamCleanup string
+	LivenessStreamJobsCleanup string
+	LivenessStreamTopicCleanup string
 }
 
 // Kafka
@@ -60,8 +60,6 @@ type Kafka struct {
 	// how to connect to kafka from liveness probe pods.
 	Port                       string
 	Service 				   string
-	// where to check Kafka pods as default check
-	Label   				   string
 	 // Deprecated moved to App
 	//Namespace 				   string
 
@@ -85,7 +83,12 @@ type Topic struct {
 
 type Producer struct {
 	MessageCount   string
+	// after each unit of ms next message will be sent
 	MessageDelayMs string
+	// after unit of ms message will not be delivered and next one will be created. "delivery.timeout.ms" configuration from kafka
+	MessageDeliveryTimeoutMs string
+	// max time of waiting before trying to repeat request regarding sending message. "request.timeout.ms" configuration from kafka
+	RequestTimeoutMs string
 	// values "all", "0", "1"
 	Acks 	       string
 
@@ -93,18 +96,12 @@ type Producer struct {
 
 type Consumer struct {
 	TimeoutMs    string
-	MessageCount string
+	MessageCount int
 }
 
 type Images struct {
 	KafkaImage 		string
 	ProducerImage 	string
-}
-
-type ClusterOperator struct{
-	// if and where  to check operator
-	Namespace string
-	Label     string
 }
 
 type Resources struct {

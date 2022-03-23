@@ -19,8 +19,8 @@ import (
 	"time"
 )
 
-//PrepareChaosInjection contains the prepration steps before chaos injection
-func PrepareChaosInjection(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets, resultDetails *types.ResultDetails, eventsDetails *types.EventDetails, chaosDetails *types.ChaosDetails) error {
+//PrepareResourceDelete contains the preparation steps before chaos injection
+func PrepareResourceDelete(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets, resultDetails *types.ResultDetails, eventsDetails *types.EventDetails, chaosDetails *types.ChaosDetails) error {
 
 	//Waiting for the ramp time before chaos injection
 	if experimentsDetails.Control.RampTime != 0 {
@@ -65,45 +65,48 @@ func injectChaosInSerialMode(experimentsDetails *experimentTypes.ExperimentDetai
 	duration := int(time.Since(ChaosStartTimeStamp).Seconds())
 
 	for duration < experimentsDetails.Control.ChaosDuration {
-		var err error
+
+		if len(experimentsDetails.Resources.Resources) == 0{
+			return errors.Errorf("please provide at least one resource (i.e. name of secret, configuration map or service)")
+		}
+
 		if experimentsDetails.Control.EngineName != "" {
 			msg := "Injecting " + experimentsDetails.Control.ExperimentName + " chaos on application resources"
 			types.SetEngineEventAttributes(eventsDetails, types.ChaosInject, msg, "Normal", chaosDetails)
 			events.GenerateEvents(eventsDetails, clients, chaosDetails, "ChaosEngine")
 		}
 
-		log.InfoWithValues("[Chaos]: If exist, following resources will be sequentially deleted", logrus.Fields{
+		log.InfoWithValues("[Info]: following resources marked for deletion", logrus.Fields{
 			//"Resource type": resource.Type,
 			"Resource": experimentsDetails.Resources.Resources})
 
 		for _, elem := range experimentsDetails.Resources.Resources {
-			log.InfoWithValues("[Chaos]: deleting following resource", logrus.Fields{
-				"Resource type": elem.Type,
-				"Resource name:": elem.Name,
-			})
+			log.InfoWithValues("[Chaos]: If exist, killing the following resource", logrus.Fields{
+				"Resource": elem})
+
 			if err := strimzi_utils.DeleteResource(experimentsDetails.App.Namespace, elem, experimentsDetails.Control.Force, clients); err != nil {
 				return err
 			}
-
+			// obtain duration (either fixed, or one in specified by randomness interval)
 			chaosIntervalDuration, err := environment.GetChaosIntervalDuration(*experimentsDetails, chaosDetails.Randomness)
 			if err != nil {
 				return err
 			}
 			log.InfoWithValues("[Wait]: Waiting for single chaos interval", logrus.Fields{
-				//"Resource type": resource.Type,
 				"Chaos Interval Duration": chaosIntervalDuration})
 
 			// wait for specified duration
 			strimzi_utils.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, chaosIntervalDuration)
 
+			//Verify the existence of given resource after specified interval
+			log.Info("[Status]: Verification for the recreation of application resources")
+			if err = strimzi_utils.HealthCheckResources(experimentsDetails.App.Namespace,[]experimentTypes.KubernetesResource{elem},0,1,clients); err != nil {
+				return err
+			}
 		}
 
 
-		//Verify the existence of resources after
-		log.Info("[Status]: Verification for the recreation of application resources")
-		if err = strimzi_utils.HealthCheckAll(experimentsDetails.App.Namespace,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
-			return err
-		}
+
 
 		duration = int(time.Since(ChaosStartTimeStamp).Seconds())
 	}
@@ -136,7 +139,6 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 		}
 
 		log.InfoWithValues("[Chaos]: If exist, killing the following resource", logrus.Fields{
-			//"Resource type": resource.Type,
 			"Resource": experimentsDetails.Resources.Resources})
 
 		if err := strimzi_utils.DeleteAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Force, clients); err != nil {
@@ -156,7 +158,7 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 
 		//Verify the existence of resources after
 		log.Info("[Status]: Verification for the recreation of application resources")
-		if err = strimzi_utils.HealthCheckAll(experimentsDetails.App.Namespace,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
+		if err = strimzi_utils.HealthCheckResources(experimentsDetails.App.Namespace,experimentsDetails.Resources.Resources,0,1,clients); err != nil {
 			return err
 		}
 

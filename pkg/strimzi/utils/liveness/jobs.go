@@ -6,7 +6,6 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/utils/retry"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"io"
 	batchV1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,7 +46,6 @@ func GetJobLogs( jobName, namespace string ,clients clients.ClientSets) (string,
 
 // WaitForExecPod waits for specified time till status of
 func WaitForExecPod(jobName, namespace string, timeoutDuration, delayDuration int, clients clients.ClientSets, possibleErrorMessage string) error  {
-	log.Infof("[Wait]: Waiting for job: %s", possibleErrorMessage)
 	return retry.
 		Times(uint(timeoutDuration / delayDuration)).
 		Wait(time.Duration(delayDuration) * time.Second).
@@ -59,27 +57,19 @@ func WaitForExecPod(jobName, namespace string, timeoutDuration, delayDuration in
 				return err
 			}
 			if resultJob.Status.Failed == 1 {
-				log.Errorf("Job responsible for this action failed")
-				return errors.New("container is in terminated state")
+				return errors.Errorf("Job regarding %s failed", possibleErrorMessage)
 			}
 
 			if resultJob.Status.Succeeded == 1 {
-				log.Infof("[Info]: Job responsible for this action succeeded")
 				return nil
 			}
 		return errors.Errorf("timeout while waiting for: %s", possibleErrorMessage)
 	})
-
 }
 
 // ExecKube create new job and execute cmd
-func ExecKube(jobName, imageName, namespace, command string, envs []corev1.EnvVar, clients clients.ClientSets) error{
+func ExecKube(jobName, runId, imageName, namespace, command string, envs []corev1.EnvVar, clients clients.ClientSets) error{
 	var cmdArray = []string{}
-
-	log.InfoWithValues("[Info]: Command to be executed", logrus.Fields{
-		"command": command,
-	})
-
 	// if cmd "" we assume that image itself has default CMD or ENTRYPOINT set up.
 	if command != "" {
 		cmdArray = append([]string{"sh", "-c"}, command)
@@ -93,6 +83,7 @@ func ExecKube(jobName, imageName, namespace, command string, envs []corev1.EnvVa
 		ObjectMeta: metav1.ObjectMeta{
 			Name: jobName,
 			Labels: map[string]string{
+				"run":                       runId,
 				"app":                       "kafka-liveness",
 				"name":                      jobName,
 				"app.kubernetes.io/part-of": "litmus",
@@ -102,6 +93,7 @@ func ExecKube(jobName, imageName, namespace, command string, envs []corev1.EnvVa
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
+						"run":                       runId,
 						"app":                       "kafka-liveness",
 						"app.kubernetes.io/part-of": "litmus",
 					},

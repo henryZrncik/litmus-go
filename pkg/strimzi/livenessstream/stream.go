@@ -1,17 +1,18 @@
-package liveness
+package livenessstream
 
 import (
 	"fmt"
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	strimziJobs "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/jobs"
+	strimziJobs "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/liveness"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -27,7 +28,7 @@ const (
 func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
 	// Generate a random string as suffix to topic name and liveness image in case name was not provided
 	experimentsDetails.Control.RunID = common.GetRunID()
-	log.InfoWithValues("[Liveness]: liveness checks runs with ID  ", logrus.Fields{
+	log.InfoWithValues("[Liveness]: liveness stream starts", logrus.Fields{
 		"runID": "liveness-"+ experimentsDetails.Control.RunID,
 	})
 
@@ -36,9 +37,6 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	}
 
 	// Create topic with specified configuration (i.e., replication factor, name, host)
-	log.InfoWithValues("[Liveness]: Creating the kafka liveness topic:", logrus.Fields{
-		"Kafka Topic Name": experimentsDetails.Topic.Name,
-	})
 	if err := createTopic(experimentsDetails, clients); err != nil {
 		return err
 	}
@@ -56,6 +54,11 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 
 // createTopic creates the kafka liveness pod
 func createTopic(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+	log.InfoWithValues("[Liveness]: Creating the kafka liveness topic:", logrus.Fields{
+		"Topic Name": experimentsDetails.Topic.Name,
+		"Replication Factor": experimentsDetails.Topic.ReplicationFactor,
+		"Min In Sync Replica": experimentsDetails.Topic.MinInSyncReplica,
+	})
 
 	command := fmt.Sprintf("kafka-topics --bootstrap-server %s:%s --topic %s --create --partitions 1 --replication-factor %s --config min.insync.replicas=%s",
 		experimentsDetails.Kafka.Service,
@@ -69,12 +72,12 @@ func createTopic(experimentsDetails *experimentTypes.ExperimentDetails, clients 
 	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic
-	log.Infof("[liveness]: creation of topic %s, in order to use it for liveness stream", experimentsDetails.Topic.Name)
-	if err := strimziJobs.ExecKube(jobName, cmdImage, jobNamespace, command, nil, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, cmdImage, jobNamespace, command, nil, clients); err != nil {
 		return err
 	}
 
-	// wait for topic to be created/ fail.
+	// wait for topic to be created/ fail
+	log.Info("[Wait]: Waiting for creation of the test topic")
 	if err:= strimziJobs.WaitForExecPod(jobName, jobNamespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Creation of the test topic"); err != nil {
 		return err
 	}
@@ -82,7 +85,19 @@ func createTopic(experimentsDetails *experimentTypes.ExperimentDetails, clients 
 	return nil
 }
 
+
+// createProducer pass parameters to producer image job
 func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+	log.InfoWithValues("[Liveness]: Creating the kafka producer:", logrus.Fields{
+		"Kafka Service": experimentsDetails.Kafka.Service,
+		"Kafka Port": experimentsDetails.Kafka.Port,
+		"Message Creation Delay (Ms)": experimentsDetails.Producer.MessageDelayMs,
+		"Acks": experimentsDetails.Producer.Acks,
+		"Message Delivery Timeout (Ms)": experimentsDetails.Producer.MessageDeliveryTimeoutMs,
+		"Request Timeout (Ms)": experimentsDetails.Producer.RequestTimeoutMs,
+		"Message Produced Count": experimentsDetails.Producer.MessageCount,
+	})
+
 	var envVariables []corev1.EnvVar = []corev1.EnvVar{
 		{
 			Name: "TOPIC",
@@ -112,10 +127,18 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 			Name: "PRODUCER_ACKS",
 			Value: experimentsDetails.Producer.Acks,
 		},
+		{
+			Name: "ADDITIONAL_CONFIG",
+			Value: fmt.Sprintf("delivery.timeout.ms=%s\nrequest.timeout.ms=%s",experimentsDetails.Producer.MessageDeliveryTimeoutMs, experimentsDetails.Producer.RequestTimeoutMs) ,
+		},
+		{
+			Name: "BLOCKING_PRODUCER",
+			Value: "true",
+		},
 	}
 	jobName := producerJobNamePrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Images.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Images.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
@@ -125,19 +148,26 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 
 
 func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
-	command := fmt.Sprintf("kafka-console-consumer --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %s --timeout-ms %s",
+	log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
+		"Kafka service": experimentsDetails.Kafka.Service,
+		"Kafka port": experimentsDetails.Kafka.Port,
+		"Message Produced Count": experimentsDetails.Consumer.MessageCount,
+		"Consumer Timeout (Ms)": experimentsDetails.Consumer.TimeoutMs,
+	})
+	command := fmt.Sprintf("kafka-console-consumer --property print.timestamp=true --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %d --timeout-ms %s",
 		experimentsDetails.Kafka.Service,
 		experimentsDetails.Kafka.Port,
 		experimentsDetails.Topic.Name,
 		experimentsDetails.Consumer.MessageCount,
 		experimentsDetails.Consumer.TimeoutMs,
 	)
+
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 	cmdImage := experimentsDetails.Images.KafkaImage
 	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic
-	if err := strimziJobs.ExecKube(jobName, cmdImage, jobNamespace, command, nil, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, cmdImage, jobNamespace, command, nil, clients); err != nil {
 		return err
 	}
 
@@ -147,10 +177,15 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 
 
 func VerifyLivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+	log.Infof("[Liveness]: stream verification")
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 
 	// consumer either did not start or we have timeout problem which will be reported
-	if err:= strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Finishing of consumer process"); err != nil {
+	log.InfoWithValues("[Wait]: Waiting for finish of consumer container, at most 1 timeout duration", logrus.Fields{
+		"Timeout": experimentsDetails.Control.Timeout,
+	})
+	if err:= strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "successful completion of consumer process"); err != nil {
+		return err
 	}
 
 	logs, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.App.Namespace, clients)
@@ -162,20 +197,19 @@ func VerifyLivenessStream(experimentsDetails *experimentTypes.ExperimentDetails,
 
 	if re.MatchString(logs){
 		match := re.FindStringSubmatch(logs)
-		var actualNumberOfConsumedMessages string = match[1]
-		if actualNumberOfConsumedMessages != experimentsDetails.Consumer.MessageCount {
-			log.Errorf("[Info]: consumers did not consume expected number of messages: %s/%s", experimentsDetails.Consumer.MessageCount, actualNumberOfConsumedMessages)
-			return errors.New(fmt.Sprintf("failed to consume all messages. Expected: %s, Obtained: %s",
+		actualNumberOfConsumedMessages, _ := strconv.Atoi(match[1])
+		if actualNumberOfConsumedMessages < experimentsDetails.Consumer.MessageCount {
+			return errors.New(fmt.Sprintf("failed to consume expected number of messages. Expected:%d, Obtained:%d",
 				experimentsDetails.Consumer.MessageCount,
 				actualNumberOfConsumedMessages,
 			))
 		}
 		// if logs parsed successfully and counts match, all went well.
-		log.Infof("[Info]: consumers consumed expected number of messages: %s", experimentsDetails.Consumer.MessageCount)
+		log.Infof("[Info]: consumers consumed expected number of messages: %d", experimentsDetails.Consumer.MessageCount)
 		return nil
 	}
 
-	return errors.New("unable to parse output from consumer container")
+	return errors.New("unable to parse output from consumer container, number of processed messages is expected")
 
 }
 
@@ -188,11 +222,11 @@ func GetPartitionLeaderInstanceName(experimentsDetails *experimentTypes.Experime
 	)
 	jobName := obtainTopicLeaderJobPrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Images.KafkaImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Images.KafkaImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
 		return "", err
 	}
 
-	if err := strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, 30, experimentsDetails.Control.Delay, clients, "Obtaining partition leader info"); err != nil {
+	if err := strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Obtaining partition leader info"); err != nil {
 		return "", err
 	}
 
@@ -202,20 +236,17 @@ func GetPartitionLeaderInstanceName(experimentsDetails *experimentTypes.Experime
 	}
 
 	log.Info("[Liveness]: Determine the leader broker pod name")
-	podList, err := clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).List(metav1.ListOptions{LabelSelector: experimentsDetails.Kafka.Label})
+	podList, err := clients.KubeClient.CoreV1().Pods(experimentsDetails.App.Namespace).List(metav1.ListOptions{LabelSelector: experimentsDetails.Control.AppLabel})
 	if err != nil {
 		return "", errors.Errorf("unable to find the pods with matching labels, err: %v", err)
 	}
 	//
 	for _, pod := range podList.Items {
 		if strings.ContainsAny(pod.Name, partitionLeaderId) {
-			log.Infof("[Info]: Leader kafka instance for test topic is %s", experimentsDetails.Kafka.KafkaInstancesName)
 			return pod.Name, nil
 		}
 	}
-
 	return "", errors.Errorf("no kafka pod found with %v partition leader ID", partitionLeaderId)
-
 }
 
 

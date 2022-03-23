@@ -68,44 +68,6 @@ func (c *projectClient) Get(name string, opts metav1.GetOptions) (*client.Kafka,
 }
 
 
-
-
-
-//func (c *projectClient) Create(project *clientUtils.Project) (*clientUtils.Project, error) {
-//	result := clientUtils.Project{}
-//	err := c.restClient.
-//		Post().
-//		Namespace(c.ns).
-//		Resource("projects").
-//		Body(project).
-//		Do().
-//		Into(&result)
-//	return &result, err
-//}
-
-//func (c *projectClient) Watch(opts metav1.ListOptions) (watch.Interface, error) {
-//	opts.Watch = true
-//	return c.restClient.
-//		Get().
-//		Namespace(c.ns).
-//		Resource("projects").
-//		VersionedParams(&opts, scheme.ParameterCodec).
-//		Watch()
-//}
-//
-//func (c *projectClient) Update( project *clientUtils.Project, opts metav1.UpdateOptions) (*clientUtils.Project, error) {
-//	result := clientUtils.Project{}
-//	err := c.restClient.Put().
-//		Namespace(c.ns).
-//		Resource("projects").
-//		Name(project.Name).
-//		//VersionedParams(&opts, scheme.ParameterCodec).
-//		Body(project).
-//		Do().
-//		Into(&result)
-//	return  &result, err
-//}
-//
 func (c *projectClient) Patch(name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (*client.Kafka, error) {
 	result := client.Kafka{}
 	err := c.restClient.Patch(pt).

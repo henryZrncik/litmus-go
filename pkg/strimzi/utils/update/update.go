@@ -19,10 +19,9 @@ type patchObjectValueLast struct {
 }
 
 
-func InitStrimziClient(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets,  ) error{
+func InitStrimziClient(clients clients.ClientSets) (*experimentClientSet.ExampleV1Alpha1Client, error) {
 	clientSet, err := experimentClientSet.NewForConfig(clients.KubeConfig)
-	experimentsDetails.Strimzi.Client  = clientSet
-	return err
+	return clientSet, err
 }
 
 
@@ -84,7 +83,7 @@ func verifyCurrentStrimziKafkaCRState(exp *experimentTypes.ExperimentDetails) er
 
 // just take UIDs of selected pods or return error
 func getListOfCurrentPods(exp *experimentTypes.ExperimentDetails, clients clients.ClientSets) ([]k8types.UID, error){
-	pods, err := clients.KubeClient.CoreV1().Pods(exp.App.Namespace).List(metav1.ListOptions{LabelSelector: exp.Kafka.Label})
+	pods, err := clients.KubeClient.CoreV1().Pods(exp.App.Namespace).List(metav1.ListOptions{LabelSelector: exp.Control.AppLabel})
 	if err != nil {
 			return nil, err
 	}
@@ -124,7 +123,7 @@ func proposePatch(exp *experimentTypes.ExperimentDetails) ([]client.Listener,err
 				if !isPortTaken(listeners, portNumber){
 					log.Infof("[Info]: Patch by creation of listener with name %s, and newly assigned port %d",desiredListenerName, portNumber)
 					// CREATE listener
-					listeners = setUpListeners(listeners, desiredListenerName, desiredListenerPort, true)
+					listeners = setUpListeners(listeners, desiredListenerName, portNumber, true)
 					break
 				}
 			}

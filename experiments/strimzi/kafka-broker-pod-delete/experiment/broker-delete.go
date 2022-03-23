@@ -9,10 +9,9 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/probe"
 	"github.com/litmuschaos/litmus-go/pkg/result"
 	"github.com/litmuschaos/litmus-go/pkg/status"
-	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/Liveness"
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
+	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	"github.com/litmuschaos/litmus-go/pkg/strimzi/utils/resources"
 	"github.com/litmuschaos/litmus-go/pkg/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/sirupsen/logrus"
@@ -27,12 +26,8 @@ func PodDelete(clients clients.ClientSets) {
 	chaosDetails := types.ChaosDetails{}
 
 	//Fetching all the ENV passed from the runner pod
-	log.Infof("[PreReq]: Starting Strimzi Kafka Broker pod delete experiment")
 	log.Infof("[PreReq]: Getting the ENV for the %v experiment", os.Getenv("EXPERIMENT_NAME"))
 	experimentEnv.GetENV(&experimentsDetails)
-
-	// parsing of provided resources
-	experimentsDetails.Resources.Resources = resources.ParseResourcesFromEnvs(experimentsDetails)
 
 	// Initialize the chaos attributes
 	types.InitialiseChaosVariables(&chaosDetails)
@@ -68,7 +63,7 @@ func PodDelete(clients clients.ClientSets) {
 	log.InfoWithValues("[Info]: The application information is as follows ", logrus.Fields{
 		"Application Namespace":      experimentsDetails.App.Namespace,
 		"Chaos Duration":             experimentsDetails.Control.ChaosDuration,
-		"Strimzi Operator Namespace": experimentsDetails.ClusterOperator.Namespace,
+		"App Label":    			  chaosDetails.AppDetail.Label,
 	})
 
 	// Calling AbortWatcher go routine, it will continuously watch for the abort signal and generate the required events and result
@@ -77,9 +72,7 @@ func PodDelete(clients clients.ClientSets) {
 	// PRE-CHAOS APPLICATION STATUS CHECK
 	if chaosDetails.DefaultAppHealthCheck {
 		log.Info("[Status]: Verify that the Kafka cluster is healthy(pre-chaos)")
-		// either all specified or all labeled instances will be checked.
-		log.Info("[Status]: Verify that all the kafka pods are running")
-		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, chaosDetails.AppDetail.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			log.Errorf("Cluster health check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify that the Kafka cluster is healthy, err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PreChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -115,6 +108,19 @@ func PodDelete(clients clients.ClientSets) {
 
 	// Liveness Check
 	if  strings.ToLower(experimentsDetails.App.LivenessStream) == "enable" {
+
+		// defer delete liveness jobs
+		if strings.ToLower(experimentsDetails.App.LivenessStreamJobsCleanup) == "enable" {
+			log.Infof("[Liveness-Cleanup]: Defer clean up of jobs")
+			defer strimziLiveness.JobsCleanup(&experimentsDetails,clients)
+		}
+		// defer Delete liveness topic
+		if strings.ToLower(experimentsDetails.App.LivenessStreamTopicCleanup) == "enable" {
+			log.Infof("[Liveness-Cleanup]: Defer clean up of topic")
+			defer strimziLiveness.TopicCleanup(&experimentsDetails,clients)
+		}
+
+		// actual liveness stream application
 		err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
 		if err != nil {
 			log.Errorf("Problem while creating liveness stream %v", err)
@@ -127,7 +133,7 @@ func PodDelete(clients clients.ClientSets) {
 		if strings.ToLower(experimentsDetails.Kafka.KafkaPartitionLeaderKill)  == "enable" {
 			log.Info("[Info]: Obtaining partition leader")
 			// pritning warning about useless specification
-			if experimentsDetails.Kafka.Label != "" || experimentsDetails.Kafka.KafkaInstancesName != "" {
+			if chaosDetails.AppDetail.Label != "" || experimentsDetails.Kafka.KafkaInstancesName != "" {
 				log.Warn("Providing kafka label or kafka instances is useless if you want to kill kafka liveness topic partition leader")
 			}
 			// obtaining leader
@@ -149,12 +155,9 @@ func PodDelete(clients clients.ClientSets) {
 		case "enable", "true", "yes":
 			log.Warn("[Info]: Cannot delete partition leader unless liveness stream is enabled (kafka instances specified with label or with explicit option will be used instead)")
 		default:
-			log.Infof("[Info]: Liveness Stream and killing of partition leader option disabled")
+			log.Infof("[Info]: Both Liveness Stream and killing of partition leader option disabled")
 		}
 	}
-
-	// TODO including dosplay
-	//kafka.DisplayKafkaBroker(&experimentsDetails)
 
 	// Including the litmus lib for pod-delete
 	switch experimentsDetails.Control.ChaosLib {
@@ -179,7 +182,7 @@ func PodDelete(clients clients.ClientSets) {
 	// POST-CHAOS KAFKA CLUSTER HEALTH CHECK
 	if chaosDetails.DefaultAppHealthCheck {
 		log.Info("[Status]: Verify that the Kafka cluster is healthy(post-chaos)")
-		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, experimentsDetails.Kafka.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
+		if err := status.CheckApplicationStatus(experimentsDetails.App.Namespace, chaosDetails.AppDetail.Label, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 			log.Errorf("Cluster health check failed, err: %v", err)
 			failStep := "[post-chaos]: Failed to verify that the Kafka cluster is healthy, err: " + err.Error()
 			types.SetEngineEventAttributes(&eventsDetails, types.PostChaosCheck, "AUT: Not Running", "Warning", &chaosDetails)
@@ -219,18 +222,6 @@ func PodDelete(clients clients.ClientSets) {
 		err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients)
 		if err != nil {
 			log.Errorf("Problem while checking liveness stream %v", err)
-			failStep := "[pre-chaos]: Failed to verify custom liveness check, err: " + err.Error()
-			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
-			return
-		}
-	}
-
-	// Post Chaos Liveness Clean up
-	if experimentsDetails.App.LivenessStreamCleanup == "enable" {
-		log.Infof("[liveness]: resources clean up")
-		err := strimziLiveness.Cleanup(&experimentsDetails, clients)
-		if err != nil {
-			log.Errorf("Problem while cleaning liveness stream: %v", err)
 			failStep := "[pre-chaos]: Failed to verify custom liveness check, err: " + err.Error()
 			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
 			return
