@@ -68,7 +68,7 @@ func createTopic(experimentsDetails *experimentTypes.ExperimentDetails, clients 
 		experimentsDetails.Topic.MinInSyncReplica,
 	)
 	jobName := topicJobNamePrefix + experimentsDetails.Control.RunID
-	cmdImage := experimentsDetails.Images.KafkaImage
+	cmdImage := experimentsDetails.Consumer.ConsumerImage
 	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic
@@ -138,7 +138,7 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	}
 	jobName := producerJobNamePrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Images.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Producer.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
@@ -151,19 +151,25 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
 		"Kafka service": experimentsDetails.Kafka.Service,
 		"Kafka port": experimentsDetails.Kafka.Port,
-		"Message Produced Count": experimentsDetails.Consumer.MessageCount,
+		"Messages expected Count": experimentsDetails.Consumer.MessageCount,
 		"Consumer Timeout (Ms)": experimentsDetails.Consumer.TimeoutMs,
+		"Consumer retry backoff (Ms)": experimentsDetails.Consumer.RetryBackoffMs,
+		"Consumer auto commit interval (Ms)":experimentsDetails.Consumer.AutoCommitIntervalMs,
 	})
-	command := fmt.Sprintf("kafka-console-consumer --property print.timestamp=true --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %d --timeout-ms %s",
+	// --consumer-property retry.backoff.ms=%s
+	// --consumer-property auto.commit.interval.ms=%s
+	command := fmt.Sprintf("kafka-console-consumer -property print.timestamp=true --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %d --timeout-ms %s  ",
 		experimentsDetails.Kafka.Service,
 		experimentsDetails.Kafka.Port,
 		experimentsDetails.Topic.Name,
 		experimentsDetails.Consumer.MessageCount,
 		experimentsDetails.Consumer.TimeoutMs,
+		//experimentsDetails.Consumer.RetryBackoffMs,
+		//experimentsDetails.Consumer.AutoCommitIntervalMs,
 	)
 
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
-	cmdImage := experimentsDetails.Images.KafkaImage
+	cmdImage := experimentsDetails.Consumer.ConsumerImage
 	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic
@@ -222,7 +228,7 @@ func GetPartitionLeaderInstanceName(experimentsDetails *experimentTypes.Experime
 	)
 	jobName := obtainTopicLeaderJobPrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Images.KafkaImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Consumer.ConsumerImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
 		return "", err
 	}
 

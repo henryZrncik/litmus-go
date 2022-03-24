@@ -48,7 +48,7 @@ func TopicCleanup(experimentsDetails *experimentTypes.ExperimentDetails, clients
 		experimentsDetails.Topic.Name,
 	)
 	jobName := topicCleanJobNamePrefix + experimentsDetails.Control.RunID
-	cmdImage := experimentsDetails.Images.KafkaImage
+	cmdImage := experimentsDetails.Consumer.ConsumerImage
 	jobNamespace := experimentsDetails.App.Namespace
 
 	// create Job that will create Topic

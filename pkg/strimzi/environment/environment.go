@@ -59,8 +59,10 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.Topic.MinInSyncReplica = types.Getenv("TOPIC_MIN_IN_SYNC_REPLICAS","1")
 	experimentDetails.Topic.Name = types.Getenv("TOPIC_NAME", "")
 
+
 	// Producer
 	experimentDetails.Producer = new(experimentTypes.Producer)
+	experimentDetails.Producer.ProducerImage = types.Getenv("PRODUCER_IMAGE","quay.io/strimzi-examples/java-kafka-producer:latest")
 	experimentDetails.Producer.Acks = types.Getenv("PRODUCER_ACKS","all")
 	experimentDetails.Producer.MessageCount = types.Getenv("PRODUCER_MESSAGE_COUNT","30")
 	experimentDetails.Producer.MessageDelayMs = types.Getenv("PRODUCER_MESSAGE_DELAY_MS", "1000")
@@ -70,14 +72,11 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 
 	// Consumer
 	experimentDetails.Consumer = new(experimentTypes.Consumer)
-	experimentDetails.Consumer.TimeoutMs = types.Getenv("KAFKA_CONSUMER_TIMEOUT_MS","30000")
-	experimentDetails.Consumer.MessageCount, _  = strconv.Atoi(types.Getenv("KAFKA_CONSUMER_MAX_MESSAGE_COUNT","30"))
-
-
-	// Images for execution of cmds
-	experimentDetails.Images = new(experimentTypes.Images)
-	experimentDetails.Images.KafkaImage = types.Getenv("KAFKA_LIVENESS_IMAGE","litmuschaos/kafka-client:latest")
-	experimentDetails.Images.ProducerImage = types.Getenv("STRIMZI_PRODUCER_IMAGE","quay.io/strimzi-examples/java-kafka-producer:latest")
+	experimentDetails.Consumer.ConsumerImage = types.Getenv("CONSUMER_IMAGE","litmuschaos/kafka-client:latest")
+	experimentDetails.Consumer.TimeoutMs = types.Getenv("CONSUMER_TIMEOUT_MS","30000")
+	experimentDetails.Consumer.MessageCount, _  = strconv.Atoi(types.Getenv("CONSUMER_MAX_MESSAGE_COUNT","30"))
+	experimentDetails.Consumer.RetryBackoffMs = types.Getenv("CONSUMER_RETRY_BACKOFF_MS","30")
+	experimentDetails.Consumer.AutoCommitIntervalMs = types.Getenv("CONSUMER_AUTO_COMMIT_INTERVAL_MS","30")
 
 
 	// Strimzi resources
@@ -86,6 +85,7 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.Resources.Services = types.Getenv("RESOURCE_SERVICES", "")
 	experimentDetails.Resources.ConfigMaps = types.Getenv("RESOURCE_CONFIG_MAPS", "")
 	// experimentDetails.Resources.Resources provided as part of init
+
 
 	// Strimzi kafka cluster
 	experimentDetails.Strimzi = new(experimentTypes.Strimzi)

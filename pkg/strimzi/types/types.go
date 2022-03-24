@@ -12,7 +12,6 @@ type ExperimentDetails struct {
 	Topic 				*Topic
 	Resources			*Resources
 	Producer   		    *Producer
-	Images				*Images
 	Consumer			*Consumer
 	Strimzi				*Strimzi
 }
@@ -82,6 +81,7 @@ type Topic struct {
 }
 
 type Producer struct {
+	ProducerImage string
 	MessageCount   string
 	// after each unit of ms next message will be sent
 	MessageDelayMs string
@@ -95,14 +95,13 @@ type Producer struct {
 }
 
 type Consumer struct {
+	ConsumerImage string
 	TimeoutMs    string
 	MessageCount int
+	RetryBackoffMs string
+	AutoCommitIntervalMs string
 }
 
-type Images struct {
-	KafkaImage 		string
-	ProducerImage 	string
-}
 
 type Resources struct {
 	ConfigMaps  string
