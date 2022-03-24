@@ -148,32 +148,83 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 
 
 func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+	//log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
+	//	"Kafka service": experimentsDetails.Kafka.Service,
+	//	"Kafka port": experimentsDetails.Kafka.Port,
+	//	"Message Produced Count": experimentsDetails.Consumer.MessageCount,
+	//	"Consumer Timeout (Ms)": experimentsDetails.Consumer.TimeoutMs,
+	//	"Retry (Ms)": experimentsDetails.Consumer.ConsumerRetryBackOffMs,
+	//
+	//})
+	//
+	//
+	//command := fmt.Sprintf("kafka-console-consumer --property print.timestamp=true --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %d --timeout-ms %s",
+	//	experimentsDetails.Kafka.Service,
+	//	experimentsDetails.Kafka.Port,
+	//	experimentsDetails.Topic.Name,
+	//	experimentsDetails.Consumer.MessageCount,
+	//	experimentsDetails.Consumer.TimeoutMs,
+	//)
+
+
+
+
 	log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
 		"Kafka service": experimentsDetails.Kafka.Service,
 		"Kafka port": experimentsDetails.Kafka.Port,
-		"Messages expected Count": experimentsDetails.Consumer.MessageCount,
-		"Consumer Timeout (Ms)": experimentsDetails.Consumer.TimeoutMs,
-		"Consumer retry backoff (Ms)": experimentsDetails.Consumer.RetryBackoffMs,
-		"Consumer auto commit interval (Ms)":experimentsDetails.Consumer.AutoCommitIntervalMs,
+		"Message Produced Count": experimentsDetails.Consumer.MessageCount,
+		"Group Id": experimentsDetails.Control.RunID,
+		"Topic Name": experimentsDetails.Topic.Name,
+		//"Retry (Ms)": experimentsDetails.Consumer.ConsumerRetryBackOffMs,
+		//"Reconnect (Ms)": experimentsDetails.Consumer.ConsumerReconnectBackOffMs,
+		"LOG_LEVEL": "INFO",
+		"Consumer Timeout EXTRA FOR NOW (Ms)": experimentsDetails.Consumer.TimeoutMs,
 	})
-	// --consumer-property retry.backoff.ms=%s
-	// --consumer-property auto.commit.interval.ms=%s
-	command := fmt.Sprintf("kafka-console-consumer -property print.timestamp=true --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %d --timeout-ms %s  ",
-		experimentsDetails.Kafka.Service,
-		experimentsDetails.Kafka.Port,
-		experimentsDetails.Topic.Name,
-		experimentsDetails.Consumer.MessageCount,
-		experimentsDetails.Consumer.TimeoutMs,
-		//experimentsDetails.Consumer.RetryBackoffMs,
-		//experimentsDetails.Consumer.AutoCommitIntervalMs,
-	)
 
+
+
+
+	var envVariables []corev1.EnvVar = []corev1.EnvVar{
+		{
+			Name: "TOPIC",
+			Value: experimentsDetails.Topic.Name,
+		},
+		{
+			Name: "BOOTSTRAP_SERVERS",
+			Value: fmt.Sprintf("%s:%s",experimentsDetails.Kafka.Service, experimentsDetails.Kafka.Port),
+		},
+		{
+			Name: "GROUP_ID",
+			Value: "litmus",
+		},
+		{
+			Name: "MESSAGES_PER_TRANSACTION",
+			Value: "1",
+		},
+		{
+			Name: "DELAY_MS",
+			Value: experimentsDetails.Producer.MessageDelayMs,
+		},
+		{
+			Name:  "MESSAGE_COUNT",
+			Value: fmt.Sprintf("%d",experimentsDetails.Consumer.MessageCount),
+		},
+		{
+			Name: "LOG_LEVEL",
+			Value: "INFO",
+		},
+		{
+			Name: "ADDITIONAL_CONFIG",
+			Value: fmt.Sprintf("retry.backoff.ms=%s\nreconnect.backoff.ms=%s",experimentsDetails.Consumer.RetryBackoffMs, experimentsDetails.Consumer.RetryBackoffMs) ,
+		},
+		{
+			Name: "BLOCKING_PRODUCER",
+			Value: "true",
+		},
+	}
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
-	cmdImage := experimentsDetails.Consumer.ConsumerImage
-	jobNamespace := experimentsDetails.App.Namespace
 
-	// create Job that will create Topic
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, cmdImage, jobNamespace, command, nil, clients); err != nil {
+	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, "quay.io/strimzi-examples/java-kafka-consumer:latest", experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
