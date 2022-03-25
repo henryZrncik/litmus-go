@@ -5,7 +5,7 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	strimziJobs "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/liveness"
+	strimziJobs "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/livenessjobs"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

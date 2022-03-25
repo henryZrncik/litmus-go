@@ -20,6 +20,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Kafka{},
 		&KafkaList{},
+		&KafkaTopic{},
+		&KafkaTopicList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

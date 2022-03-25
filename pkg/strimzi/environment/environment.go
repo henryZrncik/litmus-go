@@ -51,7 +51,7 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.App.LivenessStreamJobsCleanup = types.Getenv("LIVENESS_STREAM_JOBS_CLEANUP","disable")
 	experimentDetails.App.LivenessStreamTopicCleanup = types.Getenv("LIVENESS_STREAM_TOPIC_CLEANUP","disable")
 	experimentDetails.App.Namespace = types.Getenv("APP_NAMESPACE", "")
-
+	experimentDetails.App.LivenessDuration, _ = strconv.Atoi(types.Getenv("LIVENESS_STREAM_DURATION","30"))
 
 	// Strimzi Topic
 	experimentDetails.Topic = new(experimentTypes.Topic)

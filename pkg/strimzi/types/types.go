@@ -49,6 +49,7 @@ type App struct {
 	LivenessStream string
 	LivenessStreamJobsCleanup string
 	LivenessStreamTopicCleanup string
+	LivenessDuration int
 }
 
 // Kafka

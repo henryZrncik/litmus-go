@@ -4,24 +4,21 @@ import (
 	"bytes"
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
-	"github.com/litmuschaos/litmus-go/pkg/utils/retry"
 	"github.com/pkg/errors"
 	"io"
 	batchV1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
 )
 
 // GetJobLogs returns logs from
-func GetJobLogs( jobName, namespace string ,clients clients.ClientSets) (string, error){
+func GetJobLogs(jobName, namespace string ,clients clients.ClientSets) (string, error){
 	log.Infof("[Info]: Obtaining logs")
 	// get workerPod name by Job label (i.e., Job name)
 	var x, err = clients.KubeClient.CoreV1().Pods(namespace).List(metav1.ListOptions{LabelSelector: "job-name="+ jobName})
 	if err != nil {
 		return "", err
 	}
-
 	// retrieve logs from workerPod
 	workerPod := x.Items[0]
 	podLogOpts := corev1.PodLogOptions{Previous: false}
@@ -44,28 +41,6 @@ func GetJobLogs( jobName, namespace string ,clients clients.ClientSets) (string,
 	return str, nil
 }
 
-// WaitForExecPod waits for specified time till status of
-func WaitForExecPod(jobName, namespace string, timeoutDuration, delayDuration int, clients clients.ClientSets, possibleErrorMessage string) error  {
-	return retry.
-		Times(uint(timeoutDuration / delayDuration)).
-		Wait(time.Duration(delayDuration) * time.Second).
-		Try(func(attempt uint) error {
-			resultJob, err := clients.KubeClient.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
-
-			if err != nil {
-				log.Errorf("error while waiting for kubernetes job: %v", err)
-				return err
-			}
-			if resultJob.Status.Failed == 1 {
-				return errors.Errorf("Job regarding %s failed", possibleErrorMessage)
-			}
-
-			if resultJob.Status.Succeeded == 1 {
-				return nil
-			}
-		return errors.Errorf("timeout while waiting for: %s", possibleErrorMessage)
-	})
-}
 
 // ExecKube create new job and execute cmd
 func ExecKube(jobName, runId, imageName, namespace, command string, envs []corev1.EnvVar, clients clients.ClientSets) error{
@@ -110,6 +85,7 @@ func ExecKube(jobName, runId, imageName, namespace, command string, envs []corev
 					},
 
 					RestartPolicy: corev1.RestartPolicyNever,
+
 				},
 			},
 			BackoffLimit: new(int32),
@@ -118,4 +94,41 @@ func ExecKube(jobName, runId, imageName, namespace, command string, envs []corev
 
 	_, err := clients.KubeClient.BatchV1().Jobs(namespace).Create(job)
 	return err
+}
+
+// GetJobResult returns result of job (running, failed, succeeded)
+func GetJobResult(jobName, namespace string ,clients clients.ClientSets) (string, error){
+	resultJob, err := clients.KubeClient.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
+	if err != nil {
+		log.Errorf("error while waiting for kubernetes job: %v", err)
+		return "",err
+	}
+	if resultJob.Status.Failed == 1 {
+		return "failed", nil
+	}
+	if resultJob.Status.Succeeded == 1 {
+		return "succeeded", nil
+	}
+	// job is still running
+	return  "running", nil
+}
+
+// ParseJobResult
+//
+//returns: repeat if job is running and should continue so
+//
+//returns: error if job failed or timeout is reached,
+func ParseJobResult(state string, isWithinTime bool) (repeat bool, err error){
+	switch state {
+	case "running":
+		if isWithinTime {
+			return true, nil
+		}
+		// timeout
+		return false, errors.Errorf("did not end within time")
+	case "succeeded":
+		return  false, nil
+	default:
+		return false, errors.Errorf("failed")
+	}
 }

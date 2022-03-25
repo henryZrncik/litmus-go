@@ -12,11 +12,14 @@ import (
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
 	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
+	strimzikafkaresource "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/update"
 	"github.com/litmuschaos/litmus-go/pkg/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"strings"
+	"time"
 )
 
 func PodDelete(clients clients.ClientSets) {
@@ -34,6 +37,17 @@ func PodDelete(clients clients.ClientSets) {
 
 	// Initialize Chaos Result Parameters
 	types.SetResultAttributes(&resultDetails, chaosDetails)
+
+	// TODO tidy me
+	strimziClient, err := strimzikafkaresource.InitStrimziClient(clients)
+	if err != nil {
+		log.Errorf(err.Error())
+	}
+	rude, err := strimziClient.KafkaTopic("kafka").Get("strimzi-store-topic---effb8e3e057afce1ecf67c3f5d8e4e3ff177fc55", metav1.GetOptions{} )
+	if err != nil {
+		log.Errorf(err.Error())
+	}
+	log.Info(rude.Name)
 
 	if experimentsDetails.Control.EngineName != "" {
 		// Initialize the probe details. Bail out upon error, as we haven't entered exp business logic yet
@@ -105,7 +119,7 @@ func PodDelete(clients clients.ClientSets) {
 		events.GenerateEvents(&eventsDetails, clients, &chaosDetails, "ChaosEngine")
 	}
 
-
+	var livenessStartTime *time.Time
 	// Liveness Check
 	if  strings.ToLower(experimentsDetails.App.LivenessStream) == "enable" {
 
@@ -121,9 +135,10 @@ func PodDelete(clients clients.ClientSets) {
 		}
 
 		// actual liveness stream application
-		err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
+		lst, err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
+
 		if err != nil {
-			log.Errorf("Problem while creating liveness stream %v", err)
+			log.Errorf("Problem while creating liveness stream. %v", err)
 			failStep := "[pre-chaos]: Failed to verify custom liveness check, err: " + err.Error()
 			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
 			return
@@ -147,6 +162,8 @@ func PodDelete(clients clients.ClientSets) {
 			log.Infof("[Info]: Kafka partition leader is %v", experimentsDetails.Kafka.KafkaInstancesName)
 
 		}
+		// assign time for later use
+		livenessStartTime = lst
 	}
 
 	// if liveness check not provided but user intend to use partition leader print warning
@@ -219,9 +236,9 @@ func PodDelete(clients clients.ClientSets) {
 	// Post Chaos Liveness Check
 	if experimentsDetails.App.LivenessStream == "enable" {
 		log.Infof("[liveness]: Verifying liveness of topic production/consumption during chaos (e.i., verifying that expected number of messages were produced/consumed)")
-		err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients)
+		err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients, livenessStartTime)
 		if err != nil {
-			log.Errorf("Problem while checking liveness stream %v", err)
+			log.Errorf("Problem while checking liveness stream. %v", err)
 			failStep := "[pre-chaos]: Failed to verify custom liveness check, err: " + err.Error()
 			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
 			return
