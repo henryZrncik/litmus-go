@@ -9,10 +9,10 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/probe"
 	"github.com/litmuschaos/litmus-go/pkg/result"
 	"github.com/litmuschaos/litmus-go/pkg/status"
+	"github.com/litmuschaos/litmus-go/pkg/strimzi/client/clientset"
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
 	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	strimzikafkaresource "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/update"
 	"github.com/litmuschaos/litmus-go/pkg/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/sirupsen/logrus"
@@ -77,7 +77,7 @@ func Update(clients clients.ClientSets) {
 
 	// Pre chaos step: set up strimzi specific k8 client
 	log.Infof("[PreReq]: Set up strimzi k8 client")
-	strimziClient, err := strimzikafkaresource.InitStrimziClient(clients)
+	strimziClient, err := clientset.InitStrimziClient(clients)
 	if err != nil {
 		log.Errorf("Unable to create Strimzi client, err: %v", err)
 		failStep := "[pre-chaos]: Failed to create Strimzi client, err: " + err.Error()
@@ -136,7 +136,7 @@ func Update(clients clients.ClientSets) {
 		// defer Delete liveness topic
 		if strings.ToLower(experimentsDetails.App.LivenessStreamTopicCleanup) == "enable" {
 			log.Infof("[Liveness-Cleanup]: Defer clean up of topic")
-			defer strimziLiveness.TopicCleanup(&experimentsDetails,clients)
+			defer strimziLiveness.TopicCleanup(&experimentsDetails)
 		}
 		// apply liveness stream
 		lst, err := strimziLiveness.LivenessStream(&experimentsDetails, clients)

@@ -9,14 +9,13 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/probe"
 	"github.com/litmuschaos/litmus-go/pkg/result"
 	"github.com/litmuschaos/litmus-go/pkg/status"
+	"github.com/litmuschaos/litmus-go/pkg/strimzi/client/clientset"
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
 	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	strimzikafkaresource "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/update"
 	"github.com/litmuschaos/litmus-go/pkg/types"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/sirupsen/logrus"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"strings"
 	"time"
@@ -38,16 +37,6 @@ func PodDelete(clients clients.ClientSets) {
 	// Initialize Chaos Result Parameters
 	types.SetResultAttributes(&resultDetails, chaosDetails)
 
-	// TODO tidy me
-	strimziClient, err := strimzikafkaresource.InitStrimziClient(clients)
-	if err != nil {
-		log.Errorf(err.Error())
-	}
-	rude, err := strimziClient.KafkaTopic("kafka").Get("strimzi-store-topic---effb8e3e057afce1ecf67c3f5d8e4e3ff177fc55", metav1.GetOptions{} )
-	if err != nil {
-		log.Errorf(err.Error())
-	}
-	log.Info(rude.Name)
 
 	if experimentsDetails.Control.EngineName != "" {
 		// Initialize the probe details. Bail out upon error, as we haven't entered exp business logic yet
@@ -82,6 +71,18 @@ func PodDelete(clients clients.ClientSets) {
 
 	// Calling AbortWatcher go routine, it will continuously watch for the abort signal and generate the required events and result
 	go common.AbortWatcher(experimentsDetails.Control.ExperimentName, clients, &resultDetails, &chaosDetails, &eventsDetails)
+
+	// Pre chaos step: set up strimzi specific k8 client
+	log.Infof("[PreReq]: Set up strimzi k8 client")
+	strimziClient, err := clientset.InitStrimziClient(clients)
+	if err != nil {
+		log.Errorf("Unable to create Strimzi client, err: %v", err)
+		failStep := "[pre-chaos]: Failed to create Strimzi client, err: " + err.Error()
+		result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+		return
+	}
+	experimentsDetails.Strimzi.Client = strimziClient
+
 
 	// PRE-CHAOS APPLICATION STATUS CHECK
 	if chaosDetails.DefaultAppHealthCheck {
@@ -123,15 +124,15 @@ func PodDelete(clients clients.ClientSets) {
 	// Liveness Check
 	if  strings.ToLower(experimentsDetails.App.LivenessStream) == "enable" {
 
-		// defer delete liveness jobs
+		// defer delete liveness strimziLivenessUtils
 		if strings.ToLower(experimentsDetails.App.LivenessStreamJobsCleanup) == "enable" {
-			log.Infof("[Liveness-Cleanup]: Defer clean up of jobs")
+			log.Infof("[Liveness-Cleanup]: Defer clean up of strimziLivenessUtils")
 			defer strimziLiveness.JobsCleanup(&experimentsDetails,clients)
 		}
 		// defer Delete liveness topic
 		if strings.ToLower(experimentsDetails.App.LivenessStreamTopicCleanup) == "enable" {
 			log.Infof("[Liveness-Cleanup]: Defer clean up of topic")
-			defer strimziLiveness.TopicCleanup(&experimentsDetails,clients)
+			defer strimziLiveness.TopicCleanup(&experimentsDetails)
 		}
 
 		// actual liveness stream application

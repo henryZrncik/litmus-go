@@ -5,7 +5,6 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/strimzi/client"
-	experimentClientSet "github.com/litmuschaos/litmus-go/pkg/strimzi/client/clientset"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8types "k8s.io/apimachinery/pkg/types"
@@ -17,13 +16,6 @@ type patchObjectValueLast struct {
 	Path  string            `json:"path"`
 	Value []client.Listener `json:"value"`
 }
-
-
-func InitStrimziClient(clients clients.ClientSets) (*experimentClientSet.ExampleV1Alpha1Client, error) {
-	clientSet, err := experimentClientSet.NewForConfig(clients.KubeConfig)
-	return clientSet, err
-}
-
 
 func Update(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) ([]k8types.UID, error){
 	// Warning about conditions on cluster. If error comes, propagate it.

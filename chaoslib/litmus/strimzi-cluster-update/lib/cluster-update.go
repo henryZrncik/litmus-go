@@ -81,7 +81,13 @@ func injectChaos(experimentsDetails *experimentTypes.ExperimentDetails, clients 
 			"Chaos Interval Duration": chaosIntervalDuration})
 
 		// actually wait and log info about waiting duration
-		strimzi_kafka_resource.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, podsUIDs, chaosIntervalDuration)
+		numberOfUnUpdatedPods, err := strimzi_kafka_resource.WaitForChaosIntervalDurationResources(*experimentsDetails,clients, podsUIDs, chaosIntervalDuration)
+		if err != nil {
+			return err
+		}
+		if numberOfUnUpdatedPods !=0  {
+			return errors.Errorf("Not all pods were updated. %d were not updated.",numberOfUnUpdatedPods)
+		}
 
 		//Verify the status of pod after the chaos injection
 		log.Info("[Status]: Verification for the recreation of application pod")

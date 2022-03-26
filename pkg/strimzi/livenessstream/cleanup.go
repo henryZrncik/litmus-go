@@ -5,7 +5,7 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	strimziJobs "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/livenessjobs"
+	strimziLivenessUtils "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/liveness"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -38,30 +38,33 @@ func JobsCleanup(experimentsDetails *experimentTypes.ExperimentDetails, clients 
 }
 
 // TopicCleanup creates the kafka liveness pod
-func TopicCleanup(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+func TopicCleanup(exp *experimentTypes.ExperimentDetails) error {
 	log.InfoWithValues("[Liveness-Cleanup]: (post-chaos cleanup) Deleting the kafka liveness topic:", logrus.Fields{
-		"Topic Name": experimentsDetails.Topic.Name,
+		"Topic Name": exp.Topic.Name,
 	})
-	command := fmt.Sprintf("kafka-topics --bootstrap-server %s:%s --delete --topic %s",
-		experimentsDetails.Kafka.Service,
-		experimentsDetails.Kafka.Port,
-		experimentsDetails.Topic.Name,
-	)
-	jobName := topicCleanJobNamePrefix + experimentsDetails.Control.RunID
-	cmdImage := experimentsDetails.Consumer.ConsumerImage
-	jobNamespace := experimentsDetails.App.Namespace
+	return strimziLivenessUtils.DeleteTopic(exp.Topic.Name,exp.App.Namespace,*exp.Strimzi.Client)
 
-	// create Job that will create Topic
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, cmdImage, jobNamespace, command, nil, clients); err != nil {
-		return err
-	}
+	//command := fmt.Sprintf("kafka-topics --bootstrap-server %s:%s --delete --topic %s",
+	//	experimentsDetails.Kafka.Service,
+	//	experimentsDetails.Kafka.Port,
+	//	experimentsDetails.Topic.Name,
+	//)
+	//jobName := topicCleanJobNamePrefix + experimentsDetails.Control.RunID
+	//cmdImage := experimentsDetails.Consumer.ConsumerImage
+	//jobNamespace := experimentsDetails.App.Namespace
 
-	// wait for topic to be created/ fail
-	log.Info("[Wait]: Waiting for Deletion of the test topic")
-	if err:= strimziJobs.WaitForExecPod(jobName, jobNamespace, 30, experimentsDetails.Control.Delay, clients, "deleting the liveness topic"); err != nil {
-		log.Warnf("[Wait]: Error While Waiting for Deletion of the test topic: %s. Please consider delete.topic.enable option in your cluster ",err)
-		return err
-	}
+	// delete topic
 
-	return nil
+	//if err := strimziLivenessUtils.CreateJob(jobName, experimentsDetails.Control.RunID, cmdImage, jobNamespace, command, nil, clients); err != nil {
+	//	return err
+	//}
+	//
+	//// wait for topic to be created/ fail
+	//log.Info("[Wait]: Waiting for Deletion of the test topic")
+	//if err:= strimziLivenessUtils.WaitForExecPod(jobName, jobNamespace, 30, experimentsDetails.Control.Delay, clients, "deleting the liveness topic"); err != nil {
+	//	log.Warnf("[Wait]: Error While Waiting for Deletion of the test topic: %s. Please consider delete.topic.enable option in your cluster ",err)
+	//	return err
+	//}
+	//
+	//return nil
 }

@@ -55,7 +55,7 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 
 	// Strimzi Topic
 	experimentDetails.Topic = new(experimentTypes.Topic)
-	experimentDetails.Topic.ReplicationFactor = types.Getenv("TOPIC_REPLICATION_FACTOR","1")
+	experimentDetails.Topic.ReplicationFactor, _ = strconv.Atoi(types.Getenv("TOPIC_REPLICATION_FACTOR","1"))
 	experimentDetails.Topic.MinInSyncReplica = types.Getenv("TOPIC_MIN_IN_SYNC_REPLICAS","1")
 	experimentDetails.Topic.Name = types.Getenv("TOPIC_NAME", "")
 

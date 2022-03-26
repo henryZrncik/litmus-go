@@ -45,10 +45,8 @@ func ParseResourcesFromEnvs(experimentsDetails experimentTypes.ExperimentDetails
 
 }
 
-
-
-// DeleteAll deletes all provided resources, it does not consider problem if any of them already does not exist, for that is purpose of default health check.
-func DeleteAll(appNs string, resources []experimentTypes.KubernetesResource, force bool, clients clients.ClientSets) error {
+// DeleteListOfResources deletes all provided resources, it does not consider problem if any of them already does not exist, for that is purpose of default health check.
+func DeleteListOfResources(appNs string, resources []experimentTypes.KubernetesResource, force bool, clients clients.ClientSets) error {
 	for _, resource := range resources {
 		log.InfoWithValues("[Chaos]: deleting following resource", logrus.Fields{
 			"Resource type": resource.Type,

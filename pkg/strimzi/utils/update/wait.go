@@ -13,7 +13,7 @@ import (
 
 // WaitForChaosIntervalDurationResources waits for time of single chaos interval
 // while it keeps logging information about availability of resources (updated pods).
-func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients clients.ClientSets, podsUIDs []k8types.UID,  chaosIntervalDuration int) {
+func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients clients.ClientSets, podsUIDs []k8types.UID,  chaosIntervalDuration int) (int, error) {
 	ChaosStartTimeStamp := time.Now()
 	duration := int(time.Since(ChaosStartTimeStamp).Seconds())
 	waitTimeOfSingleChaosInterval := chaosIntervalDuration
@@ -22,6 +22,9 @@ func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients 
 	// there is no need to log info about pods recreated more than once
 	var isLogged bool = false
 
+	terminatedOldPodsCount := 0
+	podTotal := 0
+
 	for duration < waitTimeOfSingleChaosInterval {
 		retryCount++
 		var err error
@@ -29,13 +32,13 @@ func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients 
 		// get present pods with kafka label
 		pods, err := clients.KubeClient.CoreV1().Pods(exp.App.Namespace).List(v1.ListOptions{LabelSelector: exp.Control.AppLabel})
 		if err != nil {
-			return
+			return 0, err
 		}
 
 		// how many pods we need to change
-		podTotal := len(pods.Items)
+		podTotal = len(pods.Items)
 		// for each UID (of original Pods) increase counter if it is not present
-		terminatedOldPodsCount := 0
+		terminatedOldPodsCount = 0
 
 		// check how many pods are changed
 		for _, uid := range podsUIDs{
@@ -64,7 +67,9 @@ func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients 
 			}
 		}
 	}
+
 	log.Infof("[Wait]: Time %v/%v. Waiting over", duration, waitTimeOfSingleChaosInterval)
+	return podTotal - terminatedOldPodsCount, nil
 }
 
 

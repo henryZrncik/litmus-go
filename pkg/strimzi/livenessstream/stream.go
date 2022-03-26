@@ -5,7 +5,7 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
-	strimziJobs "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/livenessjobs"
+	strimziLivenessUtils "github.com/litmuschaos/litmus-go/pkg/strimzi/utils/liveness"
 	"github.com/litmuschaos/litmus-go/pkg/utils/common"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -18,7 +18,6 @@ import (
 
 const (
 	obtainTopicLeaderJobPrefix  = "strimzi-liveness-topic-leader"
-	topicJobNamePrefix          = "strimzi-liveness-topic-"
 	producerJobNamePrefix = "strimzi-liveness-producer-"
 	consumerJobNamePrefix = "strimzi-liveness-consumer-"
 )
@@ -39,7 +38,7 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	}
 
 	// Create topic with specified configuration (i.e., replication factor, name, host)
-	if err := createTopic(experimentsDetails, clients); err != nil {
+	if err :=  strimziLivenessUtils.CreateTopic(*experimentsDetails, *experimentsDetails.Strimzi.Client); err != nil {
 		return nil, err
 	}
 	// creation of producer Job
@@ -55,53 +54,18 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	producerJobName := producerJobNamePrefix + experimentsDetails.Control.RunID
 	consumerJobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 	log.Infof("[Wait] Waiting for preparation of producer")
-	err := strimziJobs.WaitForRunningJob(producerJobName, experimentsDetails.App.Namespace, clients, 2)
+	err := strimziLivenessUtils.WaitForJobStart(producerJobName, experimentsDetails.App.Namespace, 30, experimentsDetails.Control.Delay, clients)
 	if err != nil {
 		return nil, err
 	}
 	log.Infof("[Wait] Waiting for preparation of consumer")
-	err = strimziJobs.WaitForRunningJob(consumerJobName, experimentsDetails.App.Namespace, clients, 2)
+	err = strimziLivenessUtils.WaitForJobStart(consumerJobName, experimentsDetails.App.Namespace, 30, experimentsDetails.Control.Delay, clients)
 	if err != nil {
 		return nil, err
 	}
 	timeNow := time.Now()
 	return &timeNow, nil
 }
-
-// createTopic creates the kafka liveness pod
-func createTopic(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
-	log.InfoWithValues("[Liveness]: Creating the kafka liveness topic:", logrus.Fields{
-		"Topic Name": experimentsDetails.Topic.Name,
-		"Replication Factor": experimentsDetails.Topic.ReplicationFactor,
-		"Min In Sync Replica": experimentsDetails.Topic.MinInSyncReplica,
-	})
-
-	command := fmt.Sprintf("kafka-topics --bootstrap-server %s:%s --topic %s --create --partitions 1 --replication-factor %s --config min.insync.replicas=%s",
-		experimentsDetails.Kafka.Service,
-		experimentsDetails.Kafka.Port,
-		experimentsDetails.Topic.Name,
-		experimentsDetails.Topic.ReplicationFactor,
-		experimentsDetails.Topic.MinInSyncReplica,
-	)
-	jobName := topicJobNamePrefix + experimentsDetails.Control.RunID
-	cmdImage := experimentsDetails.Consumer.ConsumerImage
-	jobNamespace := experimentsDetails.App.Namespace
-
-	// create Job that will create Topic
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, cmdImage, jobNamespace, command, nil, clients); err != nil {
-		return  err
-	}
-
-	// wait for topic to be created/ fail
-	log.Info("[Wait]: Waiting for creation of the test topic")
-	if err:= strimziJobs.WaitForExecPod(jobName, jobNamespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Creation of the test topic"); err != nil {
-		return err
-	}
-
-
-	return  nil
-}
-
 
 // createProducer pass parameters to producer image job
 func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
@@ -155,7 +119,7 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	}
 	jobName := producerJobNamePrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Producer.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
+	if err := strimziLivenessUtils.CreateJob(jobName, experimentsDetails.Control.RunID, experimentsDetails.Producer.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
@@ -165,27 +129,6 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 
 
 func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
-	//log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
-	//	"Kafka service": experimentsDetails.Kafka.Service,
-	//	"Kafka port": experimentsDetails.Kafka.Port,
-	//	"Message Produced Count": experimentsDetails.Consumer.MessageCount,
-	//	"Consumer Timeout (Ms)": experimentsDetails.Consumer.TimeoutMs,
-	//	"Retry (Ms)": experimentsDetails.Consumer.ConsumerRetryBackOffMs,
-	//
-	//})
-	//
-	//
-	//command := fmt.Sprintf("kafka-console-consumer --property print.timestamp=true --bootstrap-server %s:%s --topic %s --from-beginning  --max-messages %d --timeout-ms %s",
-	//	experimentsDetails.Kafka.Service,
-	//	experimentsDetails.Kafka.Port,
-	//	experimentsDetails.Topic.Name,
-	//	experimentsDetails.Consumer.MessageCount,
-	//	experimentsDetails.Consumer.TimeoutMs,
-	//)
-
-
-
-
 	log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
 		"Kafka service": experimentsDetails.Kafka.Service,
 		"Kafka port": experimentsDetails.Kafka.Port,
@@ -197,9 +140,6 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 		"LOG_LEVEL": "INFO",
 		"Consumer Timeout EXTRA FOR NOW (Ms)": experimentsDetails.Consumer.TimeoutMs,
 	})
-
-
-
 
 	var envVariables []corev1.EnvVar = []corev1.EnvVar{
 		{
@@ -241,7 +181,7 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	}
 	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, "quay.io/strimzi-examples/java-kafka-consumer:latest", experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
+	if err := strimziLivenessUtils.CreateJob(jobName, experimentsDetails.Control.RunID, "quay.io/strimzi-examples/java-kafka-consumer:latest", experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
@@ -250,77 +190,33 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 }
 
 
-func VerifyLivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets, startedTime *time.Time) error {
+func VerifyLivenessStream(exp *experimentTypes.ExperimentDetails, clients clients.ClientSets, startedTime *time.Time) error {
 	log.Infof("[Liveness]: stream verification")
-	consumerJobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
-	producerJobName := producerJobNamePrefix + experimentsDetails.Control.RunID
-
-	// consumer either did not start or we have timeout problem which will be reported
-	log.InfoWithValues("[Wait]: Waiting for finish of consumer container, at most 1 timeout duration", logrus.Fields{
-		"Timeout": experimentsDetails.Control.Timeout,
-	})
+	consumerJobName := consumerJobNamePrefix + exp.Control.RunID
+	producerJobName := producerJobNamePrefix + exp.Control.RunID
 
 	duration := int(time.Since(*startedTime).Seconds())
 
-	// while duration of liveness wasn't reached "running" state means that we still wait
-	for  {
-		duration = int(time.Since(*startedTime).Seconds())
-		consumerResult, _ := strimziJobs.GetJobResult(consumerJobName,experimentsDetails.App.Namespace,clients)
-		producerResult, _ := strimziJobs.GetJobResult(producerJobName,experimentsDetails.App.Namespace,clients)
-		// parse producer result
-		repeatProducer, errProducer := strimziJobs.ParseJobResult(producerResult, duration < experimentsDetails.App.LivenessDuration)
-		// consumer has 5 extra seconds to finish after
-		repeatConsumer, errConsumer := strimziJobs.ParseJobResult(consumerResult, duration < (experimentsDetails.App.LivenessDuration + 5))
-
-		if errProducer != nil {
-			return errors.Errorf("Producer %v", errProducer.Error())
-		}
-		if errConsumer != nil {
-			return errors.Errorf("Consumer %v", errConsumer.Error())
-		}
-		if !repeatProducer && !repeatConsumer {
-			return nil
-		}
-		common.WaitForDuration(experimentsDetails.Control.Delay)
-
+	restDuration := 0
+	if duration < exp.App.LivenessDuration {
+		restDuration = exp.App.LivenessDuration  - duration
 	}
+
+	log.Infof("[Wait]: Waiting for finish of producer and consumer container. Duration of liveness stream is %d/%d",duration, exp.App.LivenessDuration)
+	log.Infof("[Info]: Rest of time for liveness is: %d seconds",restDuration)
+	// while duration of liveness wasn't reached "running" state means that we still wait
+
+	err := strimziLivenessUtils.WaitForJobEnd(producerJobName, exp.App.Namespace, restDuration, exp.Control.Delay, clients)
+	if err != nil {
+		return errors.Errorf("Producer container. %s",err.Error())
+	}
+	// consumer gets 5 extra seconds to finish possible last second message
+	err = strimziLivenessUtils.WaitForJobEnd(consumerJobName, exp.App.Namespace, restDuration + 5, exp.Control.Delay, clients)
+	if err != nil {
+		return errors.Errorf("Consumer container. %s",err.Error())
+	}
+	return nil
 }
-
-
-
-
-
-	// pokym som s casom nizsie pozeram ze running je ok
-
-	// akonahle som  startedTime prekonal  clientTimeout
-
-
-	//if err:= strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "successful completion of consumer process"); err != nil {
-	//	return err
-	//}
-	//
-	//logs, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.App.Namespace, clients)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//re := regexp.MustCompile(`Processed\D*(\d+).*`)
-	//
-	//if re.MatchString(logs){
-	//	match := re.FindStringSubmatch(logs)
-	//	actualNumberOfConsumedMessages, _ := strconv.Atoi(match[1])
-	//	if actualNumberOfConsumedMessages < experimentsDetails.Consumer.MessageCount {
-	//		return errors.New(fmt.Sprintf("failed to consume expected number of messages. Expected:%d, Obtained:%d",
-	//			experimentsDetails.Consumer.MessageCount,
-	//			actualNumberOfConsumedMessages,
-	//		))
-	//	}
-	//	// if logs parsed successfully and counts match, all went well.
-	//	log.Infof("[Info]: consumers consumed expected number of messages: %d", experimentsDetails.Consumer.MessageCount)
-	//	return nil
-	//}
-	//
-	//return errors.New("unable to parse output from consumer container, number of processed messages is expected")
 
 
 // GetPartitionLeaderInstanceName get partition Leader, returns name of instance that is partition leader of given topic (its 1st partition)
@@ -332,15 +228,15 @@ func GetPartitionLeaderInstanceName(experimentsDetails *experimentTypes.Experime
 	)
 	jobName := obtainTopicLeaderJobPrefix + experimentsDetails.Control.RunID
 
-	if err := strimziJobs.ExecKube(jobName, experimentsDetails.Control.RunID, experimentsDetails.Consumer.ConsumerImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
+	if err := strimziLivenessUtils.CreateJob(jobName, experimentsDetails.Control.RunID, experimentsDetails.Consumer.ConsumerImage, experimentsDetails.App.Namespace, command, nil, clients); err != nil {
 		return "", err
 	}
 
-	if err := strimziJobs.WaitForExecPod(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients, "Obtaining partition leader info"); err != nil {
+	if err := strimziLivenessUtils.WaitForJobEnd(jobName, experimentsDetails.App.Namespace, experimentsDetails.Control.Timeout, experimentsDetails.Control.Delay, clients); err != nil {
 		return "", err
 	}
 
-	partitionLeaderId, err := strimziJobs.GetJobLogs(jobName, experimentsDetails.App.Namespace, clients)
+	partitionLeaderId, err := strimziLivenessUtils.GetJobLogs(jobName, experimentsDetails.App.Namespace, clients)
 	if err != nil {
 		return "", err
 	}

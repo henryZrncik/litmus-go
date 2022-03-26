@@ -141,7 +141,7 @@ func injectChaosInParallelMode(experimentsDetails *experimentTypes.ExperimentDet
 		log.InfoWithValues("[Chaos]: If exist, killing the following resource", logrus.Fields{
 			"Resource": experimentsDetails.Resources.Resources})
 
-		if err := strimzi_utils.DeleteAll(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Force, clients); err != nil {
+		if err := strimzi_utils.DeleteListOfResources(experimentsDetails.App.Namespace, experimentsDetails.Resources.Resources, experimentsDetails.Control.Force, clients); err != nil {
 			return err
 		}
 

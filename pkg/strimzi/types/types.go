@@ -66,7 +66,7 @@ type Kafka struct {
 }
 
 type Strimzi struct {
-	Client 	*experimentClientSet.ExampleV1Alpha1Client
+	Client 	*experimentClientSet.StrimziV1AlphaClient
 	StrimziKafkaClusterName string
 	InternalListenerPortNumber int
 	InternalListenerName string
@@ -76,7 +76,7 @@ type Strimzi struct {
 type Topic struct {
 	// Topic
 	Name              string
-	ReplicationFactor string
+	ReplicationFactor int
 	MinInSyncReplica  string
 
 }

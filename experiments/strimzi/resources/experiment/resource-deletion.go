@@ -8,6 +8,7 @@ import (
 	"github.com/litmuschaos/litmus-go/pkg/log"
 	"github.com/litmuschaos/litmus-go/pkg/probe"
 	"github.com/litmuschaos/litmus-go/pkg/result"
+	"github.com/litmuschaos/litmus-go/pkg/strimzi/client/clientset"
 	experimentEnv "github.com/litmuschaos/litmus-go/pkg/strimzi/environment"
 	strimziLiveness "github.com/litmuschaos/litmus-go/pkg/strimzi/livenessstream"
 	experimentTypes "github.com/litmuschaos/litmus-go/pkg/strimzi/types"
@@ -77,6 +78,18 @@ func ResourcesDeletion(clients clients.ClientSets) {
 	// Calling AbortWatcher go routine, it will continuously watch for the abort signal and generate the required events and result
 	go common.AbortWatcher(experimentsDetails.Control.ExperimentName, clients, &resultDetails, &chaosDetails, &eventsDetails)
 
+	// Pre chaos step: set up strimzi specific k8 client
+	log.Infof("[PreReq]: Set up strimzi k8 client")
+	strimziClient, err := clientset.InitStrimziClient(clients)
+	if err != nil {
+		log.Errorf("Unable to create Strimzi client, err: %v", err)
+		failStep := "[pre-chaos]: Failed to create Strimzi client, err: " + err.Error()
+		result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
+		return
+	}
+	experimentsDetails.Strimzi.Client = strimziClient
+
+
 	//PRE-CHAOS APPLICATION STATUS CHECK  (DEFAULT_APP_HEALTH_CHECK, default=true)
 	if chaosDetails.DefaultAppHealthCheck {
 		// Application check is skipped because there is no pod/container  that need to be checked
@@ -129,7 +142,7 @@ func ResourcesDeletion(clients clients.ClientSets) {
 		// defer Delete liveness topic
 		if strings.ToLower(experimentsDetails.App.LivenessStreamTopicCleanup) == "enable" {
 			log.Infof("[Liveness-Cleanup]: Defer clean up of topic")
-			defer strimziLiveness.TopicCleanup(&experimentsDetails,clients)
+			defer strimziLiveness.TopicCleanup(&experimentsDetails)
 		}
 		// apply liveness stream
 		lst, err := strimziLiveness.LivenessStream(&experimentsDetails, clients)

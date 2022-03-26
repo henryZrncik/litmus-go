@@ -31,7 +31,6 @@ func init() {
 }
 
 func main() {
-	log.Info("s1")
 	clients := clients.ClientSets{}
 
 	// parse the experiment name

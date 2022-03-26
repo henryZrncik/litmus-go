@@ -1,6 +1,8 @@
 package client
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 
 type KafkaTopic struct {
@@ -17,7 +19,7 @@ type KafkaTopic struct {
 
 type KafkaTopicCrSpecification struct {
 	TopicConf TopicConf `json:"config,omitempty"`
-	Replicas int `json:"replicas,omitempty"`
+	Replicas  int       `json:"replicas,omitempty"`
 	TopicName string `json:"topicName"`
 	Partitions int `json:"partitions,omitempty"`
 }

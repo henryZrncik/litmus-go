@@ -1,7 +1,6 @@
 package client
 
 import (
-	"github.com/litmuschaos/litmus-go/pkg/log"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -32,15 +31,13 @@ func (in *KafkaList) DeepCopyObject() runtime.Object {
 	return &out
 }
 
-//Kafka Topic
-
 func (in *KafkaTopic) DeepCopyInto(out *KafkaTopic) {
 	out = in
 }
 
 // DeepCopyObject returns a generically typed copy of an object
 func (in *KafkaTopic) DeepCopyObject() runtime.Object {
-	log.Info("!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
 	out := KafkaTopic{}
 	in.DeepCopyInto(&out)
 	return &out
@@ -48,7 +45,6 @@ func (in *KafkaTopic) DeepCopyObject() runtime.Object {
 
 // DeepCopyObject returns a generically typed copy of an object
 func (in *KafkaTopicList) DeepCopyObject() runtime.Object {
-	log.Info("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 	out := KafkaTopicList{}
 	out.TypeMeta = in.TypeMeta
 	out.ListMeta = in.ListMeta

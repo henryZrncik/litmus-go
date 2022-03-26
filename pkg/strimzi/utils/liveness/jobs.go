@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"github.com/litmuschaos/litmus-go/pkg/clients"
 	"github.com/litmuschaos/litmus-go/pkg/log"
-	"github.com/pkg/errors"
 	"io"
 	batchV1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,9 +40,8 @@ func GetJobLogs(jobName, namespace string ,clients clients.ClientSets) (string, 
 	return str, nil
 }
 
-
-// ExecKube create new job and execute cmd
-func ExecKube(jobName, runId, imageName, namespace, command string, envs []corev1.EnvVar, clients clients.ClientSets) error{
+// CreateJob create new job and execute cmd
+func CreateJob(jobName, runId, imageName, namespace, command string, envs []corev1.EnvVar, clients clients.ClientSets) error{
 	var cmdArray = []string{}
 	// if cmd "" we assume that image itself has default CMD or ENTRYPOINT set up.
 	if command != "" {
@@ -96,39 +94,3 @@ func ExecKube(jobName, runId, imageName, namespace, command string, envs []corev
 	return err
 }
 
-// GetJobResult returns result of job (running, failed, succeeded)
-func GetJobResult(jobName, namespace string ,clients clients.ClientSets) (string, error){
-	resultJob, err := clients.KubeClient.BatchV1().Jobs(namespace).Get(jobName, metav1.GetOptions{})
-	if err != nil {
-		log.Errorf("error while waiting for kubernetes job: %v", err)
-		return "",err
-	}
-	if resultJob.Status.Failed == 1 {
-		return "failed", nil
-	}
-	if resultJob.Status.Succeeded == 1 {
-		return "succeeded", nil
-	}
-	// job is still running
-	return  "running", nil
-}
-
-// ParseJobResult
-//
-//returns: repeat if job is running and should continue so
-//
-//returns: error if job failed or timeout is reached,
-func ParseJobResult(state string, isWithinTime bool) (repeat bool, err error){
-	switch state {
-	case "running":
-		if isWithinTime {
-			return true, nil
-		}
-		// timeout
-		return false, errors.Errorf("did not end within time")
-	case "succeeded":
-		return  false, nil
-	default:
-		return false, errors.Errorf("failed")
-	}
-}
