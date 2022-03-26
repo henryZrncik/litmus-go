@@ -45,31 +45,29 @@ type Control struct {
 }
 
 type App struct {
-	Namespace      string
-	LivenessStream string
-	LivenessStreamJobsCleanup string
+	Namespace                  string
+	LivenessStream             string
+	LivenessStreamJobsCleanup  string
 	LivenessStreamTopicCleanup string
-	LivenessDuration int
+	LivenessDuration           int
+	LivenessImage			   string
 }
 
 // Kafka
 type Kafka struct {
 
-	KafkaPartitionLeaderKill   string
-	KafkaInstancesName         string
+	KafkaPartitionLeaderKill string
+	KafkaInstancesName       string
 	// how to connect to kafka from liveness probe pods.
-	Port                       string
-	Service 				   string
-	 // Deprecated moved to App
-	//Namespace 				   string
-
+	Port                     string
+	Service 				 string
 }
 
 type Strimzi struct {
 	Client 	*experimentClientSet.StrimziV1AlphaClient
-	StrimziKafkaClusterName string
+	StrimziKafkaClusterName    string
 	InternalListenerPortNumber int
-	InternalListenerName string
+	InternalListenerName       string
 
 }
 
@@ -82,33 +80,31 @@ type Topic struct {
 }
 
 type Producer struct {
-	ProducerImage string
-	MessageCount   string
+	ProducerImage            string
 	// after each unit of ms next message will be sent
-	MessageDelayMs string
+	MessageDelayMs           string
 	// after unit of ms message will not be delivered and next one will be created. "delivery.timeout.ms" configuration from kafka
 	MessageDeliveryTimeoutMs string
 	// max time of waiting before trying to repeat request regarding sending message. "request.timeout.ms" configuration from kafka
-	RequestTimeoutMs string
+	RequestTimeoutMs         string
 	// values "all", "0", "1"
-	Acks 	       string
+	Acks 	                 string
 
 }
 
 type Consumer struct {
-	ConsumerImage string
-	TimeoutMs    string
-	MessageCount int
-	RetryBackoffMs string
-	AutoCommitIntervalMs string
+	ConsumerImage    string
+	MessageCount     string
+	LogLevel         string
+	AdditionalConfig string
 }
 
 
 type Resources struct {
-	ConfigMaps  string
-	Secrets     string
-	Services    string
-	Resources   []KubernetesResource
+	ConfigMaps string
+	Secrets    string
+	Services   string
+	Resources  []KubernetesResource
 }
 
 type ResourceType string

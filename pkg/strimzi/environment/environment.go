@@ -15,7 +15,7 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.Control.ChaosNamespace = types.Getenv("CHAOS_NAMESPACE", "litmus")
 	experimentDetails.Control.EngineName = types.Getenv("CHAOSENGINE", "")
 	experimentDetails.Control.ChaosDuration, _ = strconv.Atoi(types.Getenv("TOTAL_CHAOS_DURATION", "30"))
-	experimentDetails.Control.ChaosInterval = types.Getenv("CHAOS_INTERVAL", "10")
+	experimentDetails.Control.ChaosInterval = types.Getenv("CHAOS_INTERVAL", "30")
 	experimentDetails.Control.RampTime, _ = strconv.Atoi(types.Getenv("RAMP_TIME", "0"))
 	experimentDetails.Control.ChaosLib = types.Getenv("LIB", "litmus")
 	experimentDetails.Control.ChaosServiceAccount = types.Getenv("CHAOS_SERVICE_ACCOUNT", "")
@@ -37,11 +37,12 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 
 	// Strimzi kafka
 	experimentDetails.Kafka = new(experimentTypes.Kafka)
-	experimentDetails.Kafka.Port = types.Getenv("KAFKA_PORT","")
-	experimentDetails.Kafka.Service = types.Getenv("KAFKA_SERVICE","")
+	// Examples provided in Strimzi are shipped with these values so it is only natural that they will be default
+	experimentDetails.Kafka.Port = types.Getenv("KAFKA_PORT","9092")
+	experimentDetails.Kafka.Service = types.Getenv("KAFKA_SERVICE","my-cluster-kafka-bootstrap")
 
 
-	experimentDetails.Kafka.KafkaInstancesName = types.Getenv("KAFKA_INSTANCE_NAME","")
+	experimentDetails.Kafka.KafkaInstancesName = types.Getenv("KAFKA_INSTANCE_NAMES","")
 	experimentDetails.Kafka.KafkaPartitionLeaderKill = types.Getenv("KAFKA_TOPIC_LEADER_KILL", "disable")
 
 
@@ -51,11 +52,11 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.App.LivenessStreamJobsCleanup = types.Getenv("LIVENESS_STREAM_JOBS_CLEANUP","disable")
 	experimentDetails.App.LivenessStreamTopicCleanup = types.Getenv("LIVENESS_STREAM_TOPIC_CLEANUP","disable")
 	experimentDetails.App.Namespace = types.Getenv("APP_NAMESPACE", "")
-	experimentDetails.App.LivenessDuration, _ = strconv.Atoi(types.Getenv("LIVENESS_STREAM_DURATION","30"))
-
+	experimentDetails.App.LivenessDuration, _ = strconv.Atoi(types.Getenv("LIVENESS_STREAM_DURATION","60"))
+	experimentDetails.App.LivenessImage = types.Getenv("LIVENESS_IMAGE", "litmuschaos/kafka-client:latest")
 	// Strimzi Topic
 	experimentDetails.Topic = new(experimentTypes.Topic)
-	experimentDetails.Topic.ReplicationFactor, _ = strconv.Atoi(types.Getenv("TOPIC_REPLICATION_FACTOR","1"))
+	experimentDetails.Topic.ReplicationFactor, _ = strconv.Atoi(types.Getenv("TOPIC_REPLICATION_FACTOR","3"))
 	experimentDetails.Topic.MinInSyncReplica = types.Getenv("TOPIC_MIN_IN_SYNC_REPLICAS","1")
 	experimentDetails.Topic.Name = types.Getenv("TOPIC_NAME", "")
 
@@ -64,7 +65,6 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.Producer = new(experimentTypes.Producer)
 	experimentDetails.Producer.ProducerImage = types.Getenv("PRODUCER_IMAGE","quay.io/strimzi-examples/java-kafka-producer:latest")
 	experimentDetails.Producer.Acks = types.Getenv("PRODUCER_ACKS","all")
-	experimentDetails.Producer.MessageCount = types.Getenv("PRODUCER_MESSAGE_COUNT","30")
 	experimentDetails.Producer.MessageDelayMs = types.Getenv("PRODUCER_MESSAGE_DELAY_MS", "1000")
 	experimentDetails.Producer.RequestTimeoutMs = types.Getenv("PRODUCER_REQUEST_TIMEOUT_MS", "6000")
 	experimentDetails.Producer.MessageDeliveryTimeoutMs = types.Getenv("PRODUCER_MESSAGE_DELIVERY_TIMEOUT_MS", "30000")
@@ -72,11 +72,10 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 
 	// Consumer
 	experimentDetails.Consumer = new(experimentTypes.Consumer)
-	experimentDetails.Consumer.ConsumerImage = types.Getenv("CONSUMER_IMAGE","litmuschaos/kafka-client:latest")
-	experimentDetails.Consumer.TimeoutMs = types.Getenv("CONSUMER_TIMEOUT_MS","30000")
-	experimentDetails.Consumer.MessageCount, _  = strconv.Atoi(types.Getenv("CONSUMER_MAX_MESSAGE_COUNT","30"))
-	experimentDetails.Consumer.RetryBackoffMs = types.Getenv("CONSUMER_RETRY_BACKOFF_MS","30")
-	experimentDetails.Consumer.AutoCommitIntervalMs = types.Getenv("CONSUMER_AUTO_COMMIT_INTERVAL_MS","30")
+	experimentDetails.Consumer.ConsumerImage = types.Getenv("CONSUMER_IMAGE", "quay.io/strimzi-examples/java-kafka-consumer:latest")
+	experimentDetails.Consumer.AdditionalConfig  = types.Getenv("CONSUMER_ADDITIONAL_CONFIG", "")
+	experimentDetails.Consumer.MessageCount = types.Getenv("MESSAGE_COUNT","40")
+	experimentDetails.Consumer.LogLevel = types.Getenv("CLIENTS_LOG_LEVEL", "INFO")
 
 
 	// Strimzi resources

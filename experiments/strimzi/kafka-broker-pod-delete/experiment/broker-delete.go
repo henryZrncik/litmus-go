@@ -240,7 +240,7 @@ func PodDelete(clients clients.ClientSets) {
 		err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients, livenessStartTime)
 		if err != nil {
 			log.Errorf("Problem while checking liveness stream. %v", err)
-			failStep := "[pre-chaos]: Failed to verify custom liveness check, err: " + err.Error()
+			failStep := "[post-chaos]: Failed to verify custom liveness check, err: " + err.Error()
 			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)
 			return
 		}
