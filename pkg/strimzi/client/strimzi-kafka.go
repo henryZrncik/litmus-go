@@ -11,7 +11,7 @@ type Kafka struct {
 	//
 	Spec KafkaCrSpecification `json:"spec"`
 	// path: /status
-	Status Status `json:"status,omitempty"`
+	Status KafkaStatus `json:"status,omitempty"`
 }
 
 // KafkaCrSpecification is json path: /spec
@@ -34,8 +34,8 @@ type Listener struct {
 	Type string `json:"type"`
 }
 
-// Status path: /status
-type Status struct {
+// KafkaStatus path: /status
+type KafkaStatus struct {
 	// path: /status/conditions
 	Conditions []metav1.Status `json:"conditions,omitempty"`
 }

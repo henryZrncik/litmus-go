@@ -14,6 +14,7 @@ type ExperimentDetails struct {
 	Producer   		    *Producer
 	Consumer			*Consumer
 	Strimzi				*Strimzi
+	Connector           *Connector
 }
 
 // Control is for collecting all the experiment-related details
@@ -51,6 +52,8 @@ type App struct {
 	LivenessStreamTopicCleanup string
 	LivenessDuration           int
 	LivenessImage			   string
+	// if set to true, yes, enable, single chaos injection ends as soon as system is within expected state
+	EndChaosInjectionASAP	   string
 }
 
 // Kafka
@@ -118,4 +121,9 @@ const (
 type KubernetesResource struct {
 	Name string
 	Type ResourceType
+}
+
+type Connector struct {
+	Name string
+	KillTaskedWorkers string
 }

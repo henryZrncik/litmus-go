@@ -62,6 +62,18 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	if err != nil {
 		return nil, err
 	}
+
+	// wait for actual start of pods (not just job noticing it)
+	err = strimziLivenessUtils.WaitForRunningJob(producerJobName, experimentsDetails.App.Namespace, clients, experimentsDetails.Control.Delay)
+	if err != nil {
+		return nil, err
+	}
+	err = strimziLivenessUtils.WaitForRunningJob(consumerJobName, experimentsDetails.App.Namespace, clients, experimentsDetails.Control.Delay)
+	if err != nil {
+		return nil, err
+	}
+
+
 	timeNow := time.Now()
 	return &timeNow, nil
 }
@@ -88,10 +100,10 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 			Name: "BOOTSTRAP_SERVERS",
 			Value: fmt.Sprintf("%s:%s",experimentsDetails.Kafka.Service, experimentsDetails.Kafka.Port),
 		},
-		{
-			Name: "GROUP_ID",
-			Value: "litmus",
-		},
+		//{
+		//	Name: "GROUP_ID",
+		//	Value: "litmus",
+		//},
 		{
 			Name: "MESSAGES_PER_TRANSACTION",
 			Value: "1",

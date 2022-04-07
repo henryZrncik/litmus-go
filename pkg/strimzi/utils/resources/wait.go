@@ -47,6 +47,11 @@ func WaitForChaosIntervalDurationResources(experimentsDetails types.ExperimentDe
 		if err == nil && !isLogged {
 			isLogged = true
 			log.Infof("[Wait]: Time %v/%v. All resources available", duration, waitTimeOfSingleChaosInterval)
+			switch experimentsDetails.App.EndChaosInjectionASAP {
+			case "enable", "true", "yes":
+				log.Info("[Info]: ending successful chaos injection ASAP")
+				return
+			}
 			continue
 		}
 

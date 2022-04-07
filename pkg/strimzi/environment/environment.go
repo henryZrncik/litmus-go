@@ -52,8 +52,9 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.App.LivenessStreamJobsCleanup = types.Getenv("LIVENESS_STREAM_JOBS_CLEANUP","disable")
 	experimentDetails.App.LivenessStreamTopicCleanup = types.Getenv("LIVENESS_STREAM_TOPIC_CLEANUP","disable")
 	experimentDetails.App.Namespace = types.Getenv("APP_NAMESPACE", "")
-	experimentDetails.App.LivenessDuration, _ = strconv.Atoi(types.Getenv("LIVENESS_STREAM_DURATION","60"))
+	experimentDetails.App.LivenessDuration, _ = strconv.Atoi(types.Getenv("LIVENESS_STREAM_DURATION","120"))
 	experimentDetails.App.LivenessImage = types.Getenv("LIVENESS_IMAGE", "litmuschaos/kafka-client:latest")
+	experimentDetails.App.EndChaosInjectionASAP = types.Getenv("END_CHAOS_INJECTION_ASAP", "")
 	// Strimzi Topic
 	experimentDetails.Topic = new(experimentTypes.Topic)
 	experimentDetails.Topic.ReplicationFactor, _ = strconv.Atoi(types.Getenv("TOPIC_REPLICATION_FACTOR","3"))
@@ -93,4 +94,9 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.Strimzi.InternalListenerPortNumber, _ = strconv.Atoi(types.Getenv("STRIMZI_KAFKA_CLUSTER_LISTENER_PORT", "10001"))
 	experimentDetails.Strimzi.InternalListenerName = types.Getenv("STRIMZI_KAFKA_CLUSTER_LISTENER_NAME", "litmus")
 
+
+	// Strimzi kafka Connector
+	experimentDetails.Connector = new(experimentTypes.Connector)
+	experimentDetails.Connector.Name = types.Getenv("KAFKA_CONNECTOR_NAME", "")
+	experimentDetails.Connector.KillTaskedWorkers = types.Getenv("KILL_TASKED_WORKERS", "")
 }

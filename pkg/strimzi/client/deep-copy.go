@@ -58,3 +58,23 @@ func (in *KafkaTopicList) DeepCopyObject() runtime.Object {
 
 	return &out
 }
+
+
+// Implementations of copies for Kafka Connector
+
+func (in *KafkaConnector) DeepCopyInto(out *KafkaConnector) {
+	out = in
+}
+
+// DeepCopyObject returns a generically typed copy of an object
+func (in *KafkaConnector) DeepCopyObject() runtime.Object {
+	out := KafkaConnector{}
+	in.DeepCopyInto(&out)
+	return &out
+}
+
+// DeepCopyObject returns a generically typed copy of an object
+func (in *KafkaConnectorList) DeepCopyObject() runtime.Object {
+	out := KafkaConnectorList{}
+	return &out
+}

@@ -13,7 +13,7 @@ type KafkaTopic struct {
 	//
 	Spec KafkaTopicCrSpecification `json:"spec"`
 	// path: /status
-	Status Status `json:"status,omitempty"`
+	Status KafkaStatus `json:"status,omitempty"`
 }
 
 

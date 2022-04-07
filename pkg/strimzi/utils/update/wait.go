@@ -55,6 +55,12 @@ func WaitForChaosIntervalDurationResources(exp types.ExperimentDetails, clients 
 		if terminatedOldPodsCount == podTotal && !isLogged{
 			isLogged = true
 			log.Infof("[Wait]: Time %v/%v. Updated strimzi kafka pods:%d/%d", duration, waitTimeOfSingleChaosInterval, terminatedOldPodsCount, podTotal)
+
+			switch exp.App.EndChaosInjectionASAP {
+			case "enable", "true", "yes":
+				log.Info("[Info]: ending successful chaos injection ASAP")
+				return 0, nil
+			}
 			continue
 		}
 

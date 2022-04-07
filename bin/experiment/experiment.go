@@ -5,6 +5,7 @@ import (
 	strimziKafkaBrokerPodDelete "github.com/litmuschaos/litmus-go/experiments/strimzi/kafka-broker-pod-delete/experiment"
 	strimziUpdateChaos "github.com/litmuschaos/litmus-go/experiments/strimzi/kafka-update/experiment"
 	strimziResources "github.com/litmuschaos/litmus-go/experiments/strimzi/resources/experiment"
+	strimziWorkerPodDelete "github.com/litmuschaos/litmus-go/experiments/strimzi/worker-pod-delete/experiment"
 
 	// Uncomment to load all auth plugins
 	// _ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -72,9 +73,11 @@ func main() {
 	//	podCPUHogExec.PodCPUHogExec(clients)
 	case "pod-delete":
 		podDelete.PodDelete(clients)
+	case "strimzi-worker-pod-delete":
+		strimziWorkerPodDelete.WorkerPodDelete(clients)
 	case "strimzi-kafka-update":
 		strimziUpdateChaos.Update(clients)
-	case "strimzi-kafka-resource-delete":
+	case "strimzi-kafka-resource-dstrimzi-worker-pod-deleteelete":
 		strimziResources.ResourcesDeletion(clients)
 	case "strimzi-pod-delete":
 		strimziKafkaBrokerPodDelete.PodDelete(clients)
