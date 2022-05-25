@@ -7,6 +7,7 @@ import (
 
 type ExperimentDetails struct {
 	Control				*Control
+	Access				*Access
 	App					*App
 	Kafka				*Kafka
 	Topic 				*Topic
@@ -15,6 +16,14 @@ type ExperimentDetails struct {
 	Consumer			*Consumer
 	Strimzi				*Strimzi
 	Connector           *Connector
+}
+
+type Access struct {
+	// tls, oauth
+	AuthorizationAndAuthenticationMethod string
+	ConsumerKafkaUserName string
+	ProducerKafkaUserName string
+	ClusterCertificate    string
 }
 
 // Control is for collecting all the experiment-related details

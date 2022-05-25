@@ -12,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
-	"time"
 )
 
 const (
@@ -25,7 +24,7 @@ const (
 // and derive the kafka topic leader(candidate for the deletion)
 //
 // returns error if ocured and time when liveness streams (producer and consumers actually start)
-func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) (*time.Time, error) {
+func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
 	// Generate a random string as suffix to topic name and liveness image in case name was not provided
 	experimentsDetails.Control.RunID = common.GetRunID()
 	log.InfoWithValues("[Liveness]: liveness stream starts", logrus.Fields{
@@ -38,15 +37,15 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 
 	// Create topic with specified configuration (i.e., replication factor, name, host)
 	if err :=  strimziLivenessUtils.CreateTopic(*experimentsDetails, *experimentsDetails.Strimzi.Client); err != nil {
-		return nil, err
+		return err
 	}
 	// creation of producer Job
 	if err := createProducer(experimentsDetails,clients); err != nil {
-		return nil, err
+		return err
 	}
 	// creation of consumer Job
 	if err := createConsumer(experimentsDetails,clients); err != nil {
-		return nil, err
+		return err
 	}
 
 	// wait till pods of producer and consumer are truly created.
@@ -55,50 +54,49 @@ func LivenessStream(experimentsDetails *experimentTypes.ExperimentDetails, clien
 	log.Infof("[Wait] Waiting for preparation of producer")
 	err := strimziLivenessUtils.WaitForJobStart(producerJobName, experimentsDetails.App.Namespace, 30, experimentsDetails.Control.Delay, clients)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	log.Infof("[Wait] Waiting for preparation of consumer")
 	err = strimziLivenessUtils.WaitForJobStart(consumerJobName, experimentsDetails.App.Namespace, 30, experimentsDetails.Control.Delay, clients)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// wait for actual start of pods (not just job noticing it)
 	err = strimziLivenessUtils.WaitForRunningJob(producerJobName, experimentsDetails.App.Namespace, clients, experimentsDetails.Control.Delay)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	err = strimziLivenessUtils.WaitForRunningJob(consumerJobName, experimentsDetails.App.Namespace, clients, experimentsDetails.Control.Delay)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-
-	timeNow := time.Now()
-	return &timeNow, nil
+	return nil
 }
 
 // createProducer pass parameters to producer image job
-func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+func createProducer(exp *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
 	log.InfoWithValues("[Liveness]: Creating the kafka producer:", logrus.Fields{
-		"Kafka Service": experimentsDetails.Kafka.Service,
-		"Kafka Port": experimentsDetails.Kafka.Port,
-		"Message Creation Delay (Ms)": experimentsDetails.Producer.MessageDelayMs,
-		"Acks": experimentsDetails.Producer.Acks,
-		"Message Delivery Timeout (Ms)": experimentsDetails.Producer.MessageDeliveryTimeoutMs,
-		"Request Timeout (Ms)": experimentsDetails.Producer.RequestTimeoutMs,
-		"Message Produced Count": experimentsDetails.Consumer.MessageCount,
-		"LOG_LEVEL": experimentsDetails.Consumer.LogLevel,
+		"Kafka Service":                 exp.Kafka.Service,
+		"Kafka Port":                    exp.Kafka.Port,
+		"Message Creation Delay (Ms)":   exp.Producer.MessageDelayMs,
+		"Acks":                          exp.Producer.Acks,
+		"Message Delivery Timeout (Ms)": exp.Producer.MessageDeliveryTimeoutMs,
+		"Request Timeout (Ms)":          exp.Producer.RequestTimeoutMs,
+		"Message Produced Count":        exp.Consumer.MessageCount,
+		"LOG_LEVEL":                     exp.Consumer.LogLevel,
 	})
+
 
 	var envVariables []corev1.EnvVar = []corev1.EnvVar{
 		{
-			Name: "TOPIC",
-			Value: experimentsDetails.Topic.Name,
+			Name:  "TOPIC",
+			Value: exp.Topic.Name,
 		},
 		{
 			Name: "BOOTSTRAP_SERVERS",
-			Value: fmt.Sprintf("%s:%s",experimentsDetails.Kafka.Service, experimentsDetails.Kafka.Port),
+			Value: fmt.Sprintf("%s:%s", exp.Kafka.Service, exp.Kafka.Port),
 		},
 		//{
 		//	Name: "GROUP_ID",
@@ -109,33 +107,40 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 			Value: "1",
 		},
 		{
-			Name: "DELAY_MS",
-			Value: experimentsDetails.Producer.MessageDelayMs,
+			Name:  "DELAY_MS",
+			Value: exp.Producer.MessageDelayMs,
 		},
 		{
-			Name: "MESSAGE_COUNT",
-			Value: experimentsDetails.Consumer.MessageCount,
+			Name:  "MESSAGE_COUNT",
+			Value: exp.Consumer.MessageCount,
 		},
 		{
-			Name: "PRODUCER_ACKS",
-			Value: experimentsDetails.Producer.Acks,
+			Name:  "PRODUCER_ACKS",
+			Value: exp.Producer.Acks,
 		},
 		{
 			Name: "ADDITIONAL_CONFIG",
-			Value: fmt.Sprintf("delivery.timeout.ms=%s\nrequest.timeout.ms=%s",experimentsDetails.Producer.MessageDeliveryTimeoutMs, experimentsDetails.Producer.RequestTimeoutMs) ,
+			Value: fmt.Sprintf("delivery.timeout.ms=%s\nrequest.timeout.ms=%s", exp.Producer.MessageDeliveryTimeoutMs, exp.Producer.RequestTimeoutMs) ,
 		},
 		{
 			Name: "BLOCKING_PRODUCER",
 			Value: "true",
 		},
 		{
-			Name: "LOG_LEVEL",
-			Value: experimentsDetails.Consumer.LogLevel,
+			Name:  "LOG_LEVEL",
+			Value: exp.Consumer.LogLevel,
 		},
 	}
-	jobName := producerJobNamePrefix + experimentsDetails.Control.RunID
+	// append acces envs if present
+	if exp.Access.AuthorizationAndAuthenticationMethod == "tls" {
+		extraVariables := getAccessEnvironmentVariables(exp.Access.ProducerKafkaUserName, exp.Access.ClusterCertificate)
+		envVariables = append(envVariables, extraVariables...)
+	}
 
-	if err := strimziLivenessUtils.CreateJob(jobName, experimentsDetails.Control.RunID, experimentsDetails.Producer.ProducerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
+
+	jobName := producerJobNamePrefix + exp.Control.RunID
+
+	if err := strimziLivenessUtils.CreateJob(jobName, exp.Control.RunID, exp.Producer.ProducerImage, exp.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 	return nil
@@ -143,25 +148,25 @@ func createProducer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 }
 
 
-func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
+func createConsumer(exp *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
 	log.InfoWithValues("[Liveness]: Creating the kafka consumer:", logrus.Fields{
-		"Kafka service": experimentsDetails.Kafka.Service,
-		"Kafka port": experimentsDetails.Kafka.Port,
-		"Message  Count": experimentsDetails.Consumer.MessageCount,
-		"Group Id": experimentsDetails.Control.RunID,
-		"Topic Name": experimentsDetails.Topic.Name,
-		"LOG_LEVEL": experimentsDetails.Consumer.LogLevel,
-		"Additional configuration": experimentsDetails.Consumer.AdditionalConfig,
+		"Kafka service":            exp.Kafka.Service,
+		"Kafka port":               exp.Kafka.Port,
+		"Message  Count":           exp.Consumer.MessageCount,
+		"Group Id":                 exp.Control.RunID,
+		"Topic Name":               exp.Topic.Name,
+		"LOG_LEVEL":                exp.Consumer.LogLevel,
+		"Additional configuration": exp.Consumer.AdditionalConfig,
 	})
 
 	var envVariables []corev1.EnvVar = []corev1.EnvVar{
 		{
-			Name: "TOPIC",
-			Value: experimentsDetails.Topic.Name,
+			Name:  "TOPIC",
+			Value: exp.Topic.Name,
 		},
 		{
 			Name: "BOOTSTRAP_SERVERS",
-			Value: fmt.Sprintf("%s:%s",experimentsDetails.Kafka.Service, experimentsDetails.Kafka.Port),
+			Value: fmt.Sprintf("%s:%s", exp.Kafka.Service, exp.Kafka.Port),
 		},
 		{
 			Name: "GROUP_ID",
@@ -169,20 +174,27 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 		},
 		{
 			Name:  "MESSAGE_COUNT",
-			Value: experimentsDetails.Consumer.MessageCount,
+			Value: exp.Consumer.MessageCount,
 		},
 		{
-			Name: "LOG_LEVEL",
-			Value: experimentsDetails.Consumer.LogLevel,
+			Name:  "LOG_LEVEL",
+			Value: exp.Consumer.LogLevel,
 		},
 		{
-			Name: "ADDITIONAL_CONFIG",
-			Value: experimentsDetails.Consumer.AdditionalConfig,
+			Name:  "ADDITIONAL_CONFIG",
+			Value: exp.Consumer.AdditionalConfig,
 		},
 	}
-	jobName := consumerJobNamePrefix + experimentsDetails.Control.RunID
 
-	if err := strimziLivenessUtils.CreateJob(jobName, experimentsDetails.Control.RunID, experimentsDetails.Consumer.ConsumerImage, experimentsDetails.App.Namespace, "", envVariables, clients); err != nil {
+	// append acces envs if present
+	if exp.Access.AuthorizationAndAuthenticationMethod == "tls" {
+		extraVariables := getAccessEnvironmentVariables(exp.Access.ConsumerKafkaUserName, exp.Access.ClusterCertificate)
+		envVariables = append(envVariables, extraVariables...)
+	}
+
+	jobName := consumerJobNamePrefix + exp.Control.RunID
+
+	if err := strimziLivenessUtils.CreateJob(jobName, exp.Control.RunID, exp.Consumer.ConsumerImage, exp.App.Namespace, "", envVariables, clients); err != nil {
 		return err
 	}
 
@@ -191,19 +203,12 @@ func createConsumer(experimentsDetails *experimentTypes.ExperimentDetails, clien
 }
 
 
-func VerifyLivenessStream(exp *experimentTypes.ExperimentDetails, clients clients.ClientSets, startedTime *time.Time) error {
+func VerifyLivenessStream(exp *experimentTypes.ExperimentDetails, clients clients.ClientSets) error {
 	log.Infof("[Liveness]: stream verification")
 	consumerJobName := consumerJobNamePrefix + exp.Control.RunID
 	producerJobName := producerJobNamePrefix + exp.Control.RunID
 
-	duration := int(time.Since(*startedTime).Seconds())
-
-	restDuration := 0
-	if duration < exp.App.LivenessDuration {
-		restDuration = exp.App.LivenessDuration  - duration
-	}
-
-	log.Infof("[Wait]: Waiting for finish of producer and consumer container. Duration of liveness stream is %d/%d",duration, exp.App.LivenessDuration)
+	restDuration := exp.App.LivenessDuration
 	log.Infof("[Info]: Waiting for end of liveness stream for additional %d seconds",restDuration)
 	// while duration of liveness wasn't reached "running" state means that we still wait
 
@@ -255,6 +260,53 @@ func GetPartitionLeaderInstanceName(experimentsDetails *experimentTypes.Experime
 		}
 	}
 	return "", errors.Errorf("no kafka pod found with %v partition leader ID", partitionLeaderId)
+}
+
+// returns list of environment variables for clients (Producer and Consumer based on choosen authorization and authentication) based
+func getAccessEnvironmentVariables(kafkaUser, clusterCa string) []corev1.EnvVar {
+	// supported TLS option
+
+		var envVariables []corev1.EnvVar = []corev1.EnvVar{
+			{
+				Name: "CA_CRT",
+				ValueFrom:  &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							clusterCa,
+						},
+						Key:                  "ca.crt",
+						Optional:             nil,
+					},
+				},
+			},
+			{
+				Name: "USER_CRT",
+				ValueFrom:  &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							kafkaUser,
+						},
+						Key:                  "user.crt",
+						Optional:             nil,
+					},
+				},
+			},
+			{
+				Name: "USER_KEY",
+				ValueFrom:  &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							kafkaUser,
+						},
+						Key:                  "user.key",
+						Optional:             nil,
+					},
+				},
+			},
+
+		}
+		return envVariables
+
 }
 
 

@@ -38,7 +38,7 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	// Strimzi kafka
 	experimentDetails.Kafka = new(experimentTypes.Kafka)
 	// Examples provided in Strimzi are shipped with these values so it is only natural that they will be default
-	experimentDetails.Kafka.Port = types.Getenv("KAFKA_PORT","9092")
+	experimentDetails.Kafka.Port = types.Getenv("KAFKA_PORT","9093")
 	experimentDetails.Kafka.Service = types.Getenv("KAFKA_SERVICE","my-cluster-kafka-bootstrap")
 
 
@@ -99,4 +99,12 @@ func GetENV(experimentDetails *experimentTypes.ExperimentDetails) {
 	experimentDetails.Connector = new(experimentTypes.Connector)
 	experimentDetails.Connector.Name = types.Getenv("KAFKA_CONNECTOR_NAME", "")
 	experimentDetails.Connector.KillTaskedWorkers = types.Getenv("KILL_TASKED_WORKERS", "")
+
+	// Accessing Kafka
+	experimentDetails.Access = new(experimentTypes.Access)
+	experimentDetails.Access.AuthorizationAndAuthenticationMethod = types.Getenv("AUTHN_AND_AUTHZ", "")
+	experimentDetails.Access.ConsumerKafkaUserName = types.Getenv("CONSUMER_KAFKA_USER", "")
+	experimentDetails.Access.ProducerKafkaUserName = types.Getenv("PRODUCER_KAFKA_USER", "")
+	experimentDetails.Access.ClusterCertificate = types.Getenv("CLUSTER_CA_CERT", "my-cluster-cluster-ca-cert")
+
 }

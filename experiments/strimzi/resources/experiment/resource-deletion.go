@@ -18,7 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
-	"time"
 )
 
 // ResourcesDeletion inject the chaos by deleting specified Strimzi resources
@@ -131,7 +130,6 @@ func ResourcesDeletion(clients clients.ClientSets) {
 	}
 
 	// PRE-CHAOS STRIMZI KAFKA APPLICATION LIVENESS CHECK
-	var livenessStartTime *time.Time
 	switch strings.ToLower(experimentsDetails.App.LivenessStream) {
 	case "enable":
 		// defer delete liveness jobs
@@ -145,7 +143,7 @@ func ResourcesDeletion(clients clients.ClientSets) {
 			defer strimziLiveness.TopicCleanup(&experimentsDetails)
 		}
 		// apply liveness stream
-		lst, err := strimziLiveness.LivenessStream(&experimentsDetails, clients)
+		err = strimziLiveness.LivenessStream(&experimentsDetails, clients)
 		if err != nil {
 			log.Errorf("Liveness check failed, err: %v", err)
 			failStep := "[pre-chaos]: Failed to verify liveness check, err: " + err.Error()
@@ -153,7 +151,6 @@ func ResourcesDeletion(clients clients.ClientSets) {
 			return
 		}
 		log.Info("[Liveness]: The Liveness stream creation completed")
-		livenessStartTime = lst
 	}
 
 	//Including the litmus lib for strimzi-resource-delete
@@ -217,7 +214,7 @@ func ResourcesDeletion(clients clients.ClientSets) {
 	switch strings.ToLower(experimentsDetails.App.LivenessStream) {
 	case "enable":
 		log.Info("[Status]: Verify that the Kafka liveness jobs finished successfully (post-chaos)")
-		if err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients, livenessStartTime); err != nil {
+		if err := strimziLiveness.VerifyLivenessStream(&experimentsDetails, clients); err != nil {
 			log.Errorf("Application liveness status check failed, err: %v", err)
 			failStep := "[post-chaos]: Failed to verify that the liveness jobs finished successfully, err: " + err.Error()
 			result.RecordAfterFailure(&chaosDetails, &resultDetails, failStep, clients, &eventsDetails)

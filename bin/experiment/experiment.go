@@ -43,7 +43,7 @@ func main() {
 		return
 	}
 
-	log.Infof("Experiment Name: %v", *experimentName)
+	log.Infof("Staring of experiment with Name: %v", *experimentName)
 
 	// invoke the corresponding experiment based on the the (-name) flag
 	switch *experimentName {
@@ -77,7 +77,7 @@ func main() {
 		strimziWorkerPodDelete.WorkerPodDelete(clients)
 	case "strimzi-kafka-update":
 		strimziUpdateChaos.Update(clients)
-	case "strimzi-kafka-resource-dstrimzi-worker-pod-deleteelete":
+	case "strimzi-kafka-resource-delete":
 		strimziResources.ResourcesDeletion(clients)
 	case "strimzi-pod-delete":
 		strimziKafkaBrokerPodDelete.PodDelete(clients)
